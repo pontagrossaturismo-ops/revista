@@ -1,11 +1,3 @@
 <?php
-$prefix = 'DB_CONV';
-$host = getenv($prefix . '_HOST');
-$user = getenv($prefix . '_USER');
-$pass = getenv($prefix . '_PASSWORD');
-$database = getenv($prefix . '_NAME');
-if (!$host || !$user || !$database) {
-    throw new RuntimeException('Configure as variáveis de conexão do banco no servidor.');
-}
-$mysqli = new mysqli($host, $user, $pass === false ? '' : $pass, $database, (int)(getenv($prefix . '_PORT') ?: 3306));
-$mysqli->set_charset('utf8mb4');
+require_once __DIR__.'/config/runtime.php';
+$mysqli=revista_connect('DB_CONV');

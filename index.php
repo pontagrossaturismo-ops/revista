@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__.'/rss/news.php';
-$titulo='Revista PG Turismo'; $pageDescription='Turismo, lazer, gastronomia e notícias';
-$palavrasChave='turismo, notícias'; $url=''; $imagem=''; $noticia=['titulo'=>$titulo,'foto1'=>''];
+$titulo=rss_escape(revista_setting('SITE_TITLE','Revista PG Turismo')); $pageDescription=rss_escape(revista_setting('SITE_DESCRIPTION','Turismo, lazer, gastronomia e notícias'));
+$palavrasChave='turismo, notícias'; $url=rss_escape(revista_setting('SITE_URL','')); $imagem=''; $noticia=['titulo'=>$titulo,'foto1'=>''];
 include 'header.php';
 ?>
 <br>

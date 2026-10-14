@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__.'/core.php';
 function revista_manual_news($category=null,$limit=54) {
-    if (!getenv('DB_HOST')) return [];
+    if (!revista_setting('DB_HOST')) return [];
     try {
         include dirname(__DIR__).'/log.php';
         $sql='SELECT * FROM materia'; $params=[];

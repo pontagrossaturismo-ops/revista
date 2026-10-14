@@ -1,5 +1,6 @@
 <?php
 putenv('RSS_DATA_DIR='.sys_get_temp_dir().'/revista-rss-test-'.bin2hex(random_bytes(6)));
+putenv('REVISTA_CONFIG_DIR='.getenv('RSS_DATA_DIR'));
 require dirname(__DIR__).'/rss/core.php';
 $count=0;
 function check($condition,$message) { global $count; if (!$condition) throw new RuntimeException($message); $count++; }

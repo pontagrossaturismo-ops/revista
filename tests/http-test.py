@@ -4,7 +4,7 @@ from pathlib import Path
 php=os.environ.get('PHP_BIN','php')
 root=Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix='revista-http-') as data:
-    env=os.environ.copy(); env['RSS_DATA_DIR']=data
+    env=os.environ.copy(); env['RSS_DATA_DIR']=data; env['REVISTA_CONFIG_DIR']=data+'/config'
     env['RSS_ADMIN_PASSWORD_HASH']=subprocess.check_output([php,'-r',"echo password_hash('test-only-password', PASSWORD_DEFAULT);"],text=True)
     env.pop('DB_HOST',None)
     with socket.socket() as s: s.bind(('127.0.0.1',0)); port=s.getsockname()[1]

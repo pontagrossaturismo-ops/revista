@@ -1,58 +1,65 @@
-# RSS na Revista PG Turismo
+# Configuração do site e RSS
 
-## O que foi ajustado
+## Instalação pela tela
 
-- Painel `rss-admin.php`: login, cadastro de fontes RSS/Atom, categoria, pausa/ativação, exclusão e diagnóstico da última importação. Para editar nome/categoria, cadastre novamente a mesma URL.
-- `rss-importar.php`: importação pelo terminal/cron, sem duplicar o mesmo item de uma fonte. Atualiza título, resumo, imagem e link quando o item muda. Erros de uma fonte não interrompem as demais nem apagam as notícias anteriores.
-- Notícias RSS aparecem na página inicial e nas categorias, usando os mesmos cards/CSS. Matérias do MySQL continuam disponíveis e separadas das notícias RSS. Os blocos são exibidos em sequência: matérias locais e depois feeds ordenados por data; não há ordenação conjunta entre as duas bases.
-- Conteúdo importado é resumo em texto, com crédito e link para ler na fonte. O site não extrai a íntegra das páginas de terceiros.
-- `feed.php` exporta as notícias RSS já importadas; aceita `?categoria=viagem` e as demais categorias. As rotas antigas `g1_turismo_rss.php` e `g1_turismo_generate_rss.php` agora exportam a categoria viagem, e não uma fonte G1 fixa. Cadastre o G1 no painel se desejar.
-- O proxy de páginas foi desativado, eliminando a busca sem verificação TLS. `example_display.php` e `display.php` usam o armazenamento local.
-
-## Instalar na hospedagem
-
-1. Faça backup do site e do banco. Envie os arquivos deste pacote para a mesma pasta do site. Mantenha as pastas existentes `img`, `imagens`, `edicoes` e demais arquivos não enviados para análise.
-2. Use PHP **8.1 ou superior**, com `curl`, `SimpleXML`, `PDO`, `pdo_sqlite` e `mysqli`/`mysqlnd`. Não há dependências Composer.
-3. Configure no servidor as variáveis `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` e, se necessário, `DB_PORT` (padrão 3306). `log-conv.php` usa os nomes equivalentes com prefixo `DB_CONV_`. Os arquivos enviados continham credenciais: troque as senhas antigas. Nenhuma senha foi incluída no pacote ajustado.
-4. Configure `RSS_DATA_DIR` com um caminho absoluto **fora da pasta pública**. Exemplo: `/home/usuario/revista-rss-data`. A pasta será criada automaticamente, mas seu diretório pai precisa permitir escrita pelo PHP/cron. Use o mesmo usuário e o mesmo caminho no PHP web e no cron. Essa pasta contém o SQLite; inclua-a nos backups. Não exige mudar a tabela `materia`.
-5. Gere um hash de senha, com entrada oculta em um terminal Bash:
+1. Faça backup do site/banco. Envie os arquivos para a pasta atual do site, preservando `img`, `imagens`, `edicoes` e outros arquivos não enviados para análise.
+2. Use PHP 8.1+ com cURL, SimpleXML, PDO SQLite e MySQLi/mysqlnd. As sessões PHP devem estar habilitadas e permitir escrita. Não precisa de Composer.
+3. No terminal da hospedagem, dentro da pasta do site, execute uma vez:
 
    ```bash
-   read -r -s -p 'Senha do painel: ' RSS_PANEL_PASSWORD; echo
-   export RSS_PANEL_PASSWORD
-   php -r 'echo password_hash(getenv("RSS_PANEL_PASSWORD"), PASSWORD_DEFAULT), PHP_EOL;'
-   unset RSS_PANEL_PASSWORD
+   php configurar-token.php
    ```
 
-   Salve o hash obtido na variável de servidor `RSS_ADMIN_PASSWORD_HASH`. Não coloque a senha ou o hash em arquivos públicos. A geração acima ocorre na sua hospedagem; não precisa enviar valores no chat. Se a hospedagem não oferecer variáveis, configure-as pelo painel ou pela configuração PHP/FPM fora do diretório público.
-6. Abra `rss-admin.php` por **HTTPS**, entre e cadastre nome, URL do feed e categoria. O painel inicia bloqueado enquanto o hash não estiver configurado. Recomenda-se limitar tentativas de login no servidor/provedor.
-7. Teste a importação no terminal:
+   Guarde o código exibido. Esse passo impede que um visitante configure o site antes do proprietário. O diretório pai da pasta do site precisa permitir criar `revista-config`, com permissão privada. Se necessário, configure `REVISTA_CONFIG_DIR` com um caminho absoluto fora da pasta pública, igual no PHP web e no cron. O instalador não publica o código de ativação.
+4. Acesse **instalar.php por HTTPS**, informe o código e preencha os campos:
+   - Nome, descrição e endereço do site.
+   - Banco MySQL: servidor/usuário/nome já sugeridos para o banco informado; senha e porta. Se já houver uma senha privada salva, deixar o campo vazio a mantém.
+   - Banco do guia de estabelecimentos, opcional, para as páginas que usam `log-conv.php`/tabela `lojas`.
+   - Senha do painel (12 caracteres ou mais), confirmação e intervalo de importação.
+   - Uma fonte RSS/Atom inicial, opcional, com nome e categoria.
+5. Clique em **Validar e salvar configuração**. O instalador verifica extensões, conexão MySQL e tabela `materia`; para o guia opcional, verifica `lojas`. Não cria/altera tabelas MySQL. Uma falha de validação não salva os campos. Sem o MySQL, é possível desmarcar essa opção e usar apenas RSS; as páginas de matérias/guia originais ainda dependem dos respectivos bancos.
+6. A configuração é gerada automaticamente em `revista-config/config.json`, fora do site público, com permissão 0600. As senhas do banco ficam apenas nesse arquivo; a senha do painel é armazenada como hash. Inclua a pasta privada nos backups e use o mesmo usuário para PHP e cron. O código de ativação é consumido. Depois de instalado, `instalar.php` exige a senha atual do painel para reconfigurar.
+7. Abra **rss-admin.php** para cadastrar, editar nome/categoria (salvando novamente a mesma URL), pausar/ativar ou excluir fontes. Excluir remove também seus itens. Fontes pausadas são ocultadas.
 
-   ```bash
-   cd /caminho/absoluto/do/site
-   php rss-importar.php
-   ```
+O código usa `getenv('DB_HOST')` para ler o **nome de uma variável**, e não `getenv('nome-do-servidor')`. A tela elimina a necessidade de escrever esses valores no PHP. Variáveis de ambiente existentes têm prioridade sobre o arquivo: se já as utiliza, ajuste/remova os valores na hospedagem para que os campos da tela tenham efeito. Nunca salve senhas no GitHub. Troque as senhas antigas que estavam expostas nos arquivos enviados.
 
-   As variáveis também precisam estar disponíveis no terminal. Código de saída 1 indica falha de alguma fonte; consulte a mensagem e a última tentativa no painel.
-8. Programe o cron da hospedagem a cada 15 minutos:
+## Ativar a atualização automática
 
-   ```cron
-   */15 * * * * cd /caminho/absoluto/do/site && /usr/bin/php rss-importar.php >> /home/usuario/revista-rss-importacao.log 2>&1
-   ```
+O instalador mostra o comando completo com a pasta correta. No painel da hospedagem, crie uma tarefa cron **a cada minuto**, usando o caminho real do PHP, por exemplo:
 
-   Adapte caminhos, configure as variáveis no ambiente do cron e mantenha o log fora da pasta pública. Faça rotação do log pelo provedor. Nenhuma atualização depende de visitas ao site. Uma segunda execução simultânea é evitada por bloqueio.
-9. Verifique notícias, categoria, crédito/link original e `feed.php`. Se a fonte falhar, o conteúdo anterior é preservado e o painel mostra o erro. Não cadastrar uma URL da página inicial: use o endereço RSS/Atom disponibilizado pelo veículo.
+```cron
+* * * * * cd /caminho/absoluto/do/site && /usr/bin/php rss-importar.php >> /home/usuario/revista-rss-importacao.log 2>&1
+```
 
-## Segurança e operação
+O importador respeita o intervalo escolhido na tela (5 a 1440 minutos) e impede execuções simultâneas. O site não tem acesso administrativo ao painel da hospedagem para cadastrar essa tarefa sozinho. Não há atualização dependente de visitas. Mantenha/rotacione logs fora da pasta pública. Se configurou REVISTA_CONFIG_DIR no PHP web, forneça o mesmo valor ao cron.
 
-A importação valida protocolos, DNS e IPs públicos, fixa o endereço resolvido no cURL, verifica certificados TLS, valida cada redirecionamento, bloqueia XML com DTD/entidades e limita cada resposta a 2 MB/100 itens. O servidor precisa permitir DNS e conexões de saída HTTP/HTTPS diretas para as fontes; este importador não usa proxies externos. Resumos são tratados como texto e escapados ao exibir. Fontes pausadas são ocultadas; excluir uma fonte remove seus itens. Não há limite global de retenção: monitore o tamanho do SQLite e seus backups.
+Para testar imediatamente:
 
-## Validação realizada neste ambiente
+```bash
+cd /caminho/absoluto/do/site
+php rss-importar.php --force
+```
 
-Sintaxe de todos os arquivos PHP validada com PHP 8.4. Passaram 24 verificações de RSS/armazenamento e 18 verificações HTTP (login, CSRF, páginas, categorias, pausa e logout). Testes automatizados: parsing RSS/Atom, entidades, URLs relativas, imagens, documentos inválidos, bloqueio de endereços privados, duplicatas, atualização, categorias, pausa, exclusão e exportação RSS. Execute novamente com:
+Código de saída 1 indica falha de uma ou mais fontes. O erro e a última tentativa também aparecem no painel. Falhas não apagam notícias anteriores nem impedem processar as demais fontes.
+
+## Como as notícias aparecem
+
+Os cards e o CSS atuais são mantidos. A página inicial e categorias exibem primeiro as matérias locais e depois o bloco RSS, ordenado por data. As duas bases não têm ordenação conjunta. O RSS usa SQLite, sem modificar `materia`. O importador aceita RSS/Atom, evita duplicatas da mesma fonte, atualiza itens modificados e exibe resumo em texto com crédito e link original, sem extrair a íntegra das páginas de terceiros.
+
+`feed.php` exporta notícias importadas e aceita `?categoria=viagem` e demais categorias. As rotas antigas `g1_turismo_rss.php` e `g1_turismo_generate_rss.php` exportam a categoria viagem; para receber G1, cadastre sua URL RSS no painel. `example_display.php` e `display.php` usam o armazenamento local. O proxy de páginas foi desativado.
+
+A importação verifica TLS, protocolos, DNS/IPs públicos e cada redirecionamento; limita respostas a 2 MB/100 itens e bloqueia DTD/entidades XML. Precisa de DNS e saída HTTP/HTTPS direta para as fontes. URLs devem ser de feeds, não páginas iniciais. Recomenda-se limitar tentativas de login pelo servidor. Não há retenção global automática: monitore SQLite e backups.
+
+## Alternativa: variáveis de ambiente
+
+A configuração por variáveis continua compatível: `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_PORT` (3306); equivalentes `DB_CONV_*` para o guia; `RSS_DATA_DIR` fora da pasta pública; `RSS_ADMIN_PASSWORD_HASH`; `RSS_INTERVAL_MINUTES`; `SITE_TITLE`, `SITE_DESCRIPTION` e `SITE_URL`. Não é necessário preenchê-las quando usar apenas a tela.
+
+## Validação
 
 ```bash
 php tests/rss-test.php
+PHP_BIN=php python3 tests/http-test.py
+PHP_BIN=php python3 tests/setup-test.py
 ```
 
-O banco MySQL original, imagens, edições e configuração da hospedagem não foram fornecidos. A integração com essas partes precisa ser validada na hospedagem. A busca de um feed externo foi bloqueada por resolução DNS neste ambiente; o recebimento real de fontes e o cron da hospedagem ainda precisam ser confirmados após a configuração.
+Neste ambiente passaram 24 verificações RSS, 18 HTTP e 26 do instalador, além da sintaxe PHP. As verificações do instalador cobrem ativação, autenticação, campos, falha de conexão, persistência privada, consumo do código e intervalo de cron. O sucesso de uma conexão MySQL real não foi testado: o domínio informado não resolveu neste ambiente (erro 2002). Uma busca RSS externa também falhou em DNS. A conexão real, feeds e agendamento precisam ser confirmados na hospedagem. Imagens e edições originais não foram fornecidas para teste.

@@ -1,11 +1,12 @@
 <?php
+require_once dirname(__DIR__).'/config/runtime.php';
 // PHP 8.1+, PDO SQLite, cURL, SimpleXML e mbstring não é necessário.
 function rss_escape($s) { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 function rss_categories() { return ['viagem','lazer','gastronomia','eventos','esporte','noticias']; }
 function rss_db() {
     static $db;
     if ($db) return $db;
-    $dir = getenv('RSS_DATA_DIR') ?: dirname(__DIR__, 2) . '/revista-rss-data';
+    $dir = revista_setting('RSS_DATA_DIR') ?: dirname(__DIR__, 2) . '/revista-rss-data';
     if (!is_dir($dir) && !mkdir($dir, 0700, true)) throw new RuntimeException('Não foi possível criar o diretório RSS.');
     $db = new PDO('sqlite:' . $dir . '/rss.sqlite', null, null, [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
     $db->exec('PRAGMA busy_timeout=10000; PRAGMA foreign_keys=ON');

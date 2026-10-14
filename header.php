@@ -1,3 +1,4 @@
+<?php require_once __DIR__.'/config/runtime.php'; $siteName=htmlspecialchars(revista_setting('SITE_TITLE','Revista PG Turismo'),ENT_QUOTES,'UTF-8'); ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -6,7 +7,7 @@
     
     <meta data-rh="true" name="theme-color" content="#c8102e">
     
-    <title>Revista PG Turismo - <?php echo $titulo; ?></title>
+    <title><?= $siteName ?> - <?php echo $titulo; ?></title>
     <meta name="description" content="<?php echo $pageDescription ?>">
     
     <!-- Favicon -->
@@ -126,6 +127,6 @@
       
     <!-- Schema.org JSON-LD -->
     <script type="application/ld+json">
-        <?php echo json_encode($schemaArticle, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT); ?>
+        <?php echo json_encode($schemaArticle, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>
     </script>
     <main class="container">

@@ -10,8 +10,8 @@ try {
     $xml=new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel/></rss>');
     $channel=$xml->channel;
     $add=function($node,$key,$value) { $child=$node->addChild($key); $child[0]=$value; return $child; };
-    $add($channel,'title','Revista PG Turismo — Notícias');
-    $add($channel,'link','https://www.revistapgturismo.com.br/');
+    $add($channel,'title',revista_setting('SITE_TITLE','Revista PG Turismo').' — Notícias');
+    $add($channel,'link',revista_setting('SITE_URL','https://www.revistapgturismo.com.br/'));
     $add($channel,'description','Notícias das fontes cadastradas na Revista PG Turismo');
     foreach($stmt as $a) {
         $i=$channel->addChild('item'); $add($i,'title',$a['title']); $add($i,'link',$a['url']); $add($i,'description',$a['summary']);

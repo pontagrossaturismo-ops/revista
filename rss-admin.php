@@ -4,8 +4,8 @@ header('Cache-Control: no-store');
 header('X-Frame-Options: DENY');
 session_set_cookie_params(['httponly'=>true,'secure'=>!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off','samesite'=>'Strict']);
 session_start();
-$password=getenv('RSS_ADMIN_PASSWORD_HASH');
-if (!$password) { http_response_code(503); exit('Configure RSS_ADMIN_PASSWORD_HASH no servidor para habilitar o painel.'); }
+$password=revista_setting('RSS_ADMIN_PASSWORD_HASH');
+if (!$password) { http_response_code(503); exit('Conclua a configuração em instalar.php para habilitar o painel.'); }
 $_SESSION['csrf']=$_SESSION['csrf'] ?? bin2hex(random_bytes(32));
 $message='';
 if ($_SERVER['REQUEST_METHOD']==='POST') {
@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 }
 function csrf_field() { echo '<input type="hidden" name="csrf" value="'.rss_escape($_SESSION['csrf']).'">'; }
 ?>
-<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fontes RSS — Revista PG Turismo</title><link rel="stylesheet" href="style.css"><main style="max-width:1000px;margin:40px auto;padding:20px"><h1>Fontes RSS</h1><p><?=rss_escape($message)?></p>
+<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fontes RSS — Revista PG Turismo</title><link rel="stylesheet" href="style.css"><main style="max-width:1000px;margin:40px auto;padding:20px"><h1>Fontes RSS</h1><p><a href="instalar.php">Configurar site</a></p><p><?=rss_escape($message)?></p>
 <?php if (empty($_SESSION['rss_admin'])): ?>
 <form method="post"><?php csrf_field(); ?><label>Senha <input type="password" name="password" required autocomplete="current-password"></label><button>Entrar</button></form>
 <?php else: ?>
