@@ -44,7 +44,7 @@ Código de saída 1 indica falha de uma ou mais fontes. O erro e a última tenta
 
 ## Como as notícias aparecem
 
-Os cards e o CSS atuais são mantidos. A página inicial e categorias exibem primeiro o bloco identificado “Notícias das fontes RSS”, ordenado por data, e depois as matérias locais. As duas bases não têm ordenação conjunta. O RSS usa SQLite, sem modificar `materia`. O importador aceita RSS/Atom, evita duplicatas da mesma fonte, atualiza itens modificados e exibe resumo em texto com crédito e link original, sem extrair a íntegra das páginas de terceiros.
+Os cards e o CSS atuais são mantidos. A página inicial e categorias exibem primeiro o bloco identificado “Notícias das fontes RSS”, ordenado por data, e depois as matérias locais. As duas bases não têm ordenação conjunta. O RSS usa SQLite, sem modificar `materia`. O importador aceita RSS/Atom, evita duplicatas da mesma fonte, atualiza itens modificados e abre as matérias dentro do próprio site, com crédito e link original. Importa o texto disponibilizado no RSS, incluindo content:encoded quando presente; não extrai a íntegra das páginas externas.
 
 `feed.php` exporta notícias importadas e aceita `?categoria=viagem` e demais categorias. As rotas antigas `g1_turismo_rss.php` e `g1_turismo_generate_rss.php` exportam a categoria viagem; para receber G1, cadastre sua URL RSS no painel. `example_display.php` e `display.php` usam o armazenamento local. O proxy de páginas foi desativado.
 
@@ -62,7 +62,7 @@ PHP_BIN=php python3 tests/http-test.py
 PHP_BIN=php python3 tests/setup-test.py
 ```
 
-Neste ambiente passaram 24 verificações RSS, 24 HTTP e 26 do instalador, além da sintaxe PHP. As verificações do instalador cobrem ativação, autenticação, campos, falha de conexão, persistência privada, consumo do código e intervalo de cron. O sucesso de uma conexão MySQL real não foi testado: o domínio informado não resolveu neste ambiente (erro 2002). Uma busca RSS externa também falhou em DNS. A conexão real, feeds e agendamento precisam ser confirmados na hospedagem. Imagens e edições originais não foram fornecidas para teste.
+Neste ambiente passaram 24 verificações RSS, 31 HTTP e 26 do instalador, além da sintaxe PHP. As verificações do instalador cobrem ativação, autenticação, campos, falha de conexão, persistência privada, consumo do código e intervalo de cron. O sucesso de uma conexão MySQL real não foi testado: o domínio informado não resolveu neste ambiente (erro 2002). Uma busca RSS externa também falhou em DNS. A conexão real, feeds e agendamento precisam ser confirmados na hospedagem. Imagens e edições originais não foram fornecidas para teste.
 
 ## Testar no XAMPP/Windows
 
@@ -97,3 +97,22 @@ C:\xampp\php\php.exe C:\xampp\htdocs\PG-2025\novo\rss-importar.php --diagnostico
 ```
 
 Os caminhos do SQLite precisam coincidir no terminal e no painel. Se forem diferentes, verifique variáveis `REVISTA_CONFIG_DIR` e `RSS_DATA_DIR`, versões dos arquivos e pasta acessada no navegador. Não compartilhe `config.json` nem suas senhas. `feed.php` permite verificar os itens exportados no navegador. Um erro 403 de uma fonte indica que aquele servidor recusou a requisição; ele não impede exibir itens importados de outras fontes.
+
+
+## Imagens e matérias dentro do site
+
+Atualize também `rss-materia.php`, `rss-imagem.php`, `rss/core.php` e `rss-admin.php`. Não apague o SQLite nem refaça a instalação. As colunas novas são adicionadas automaticamente, preservando os itens existentes.
+
+Execute novamente a importação para preencher o conteúdo e baixar as imagens dos itens antigos:
+
+```bat
+C:\xampp\php\php.exe C:\xampp\htdocs\PG-2025\novo\rss-importar.php --force
+```
+
+Os cards abrem `rss-materia.php?id=...` na mesma aba, usando o layout atual. A página mostra título, fonte, data, imagem principal e texto do feed. Se a fonte publicar apenas resumo, o site mostrará apenas esse resumo, com link para consultar o original. Não há extração automática de páginas externas.
+
+São reconhecidas imagens em media:content/media:thumbnail (inclusive grupos), enclosure e imagens no HTML de description/content:encoded, incluindo data-src/srcset. A imagem principal é baixada para `images` dentro do armazenamento RSS privado e servida por `rss-imagem.php`, sem expor a pasta. Imagens JPEG, PNG, GIF e WebP são aceitas, com limite de 5 MB e 40 milhões de pixels. Certificados e validação de destino continuam ativos. A primeira atualização pode demorar devido aos downloads.
+
+Falha ao baixar uma imagem não impede importar o texto; o endereço original é usado como alternativa quando não há cópia local. A fonte pode bloquear também essa exibição externa. Itens sem imagem fornecida pelo feed ficam sem foto. O terminal e o painel mostram falhas de imagens por fonte. O texto é exibido escapado, com parágrafos, sem executar HTML/scripts do feed. Inclua a pasta images nos backups; não há limpeza automática de imagens antigas.
+
+Os testes adicionais `php tests/media-test.php` verificam migração de base antiga, conteúdo completo, extração/cache/validação de imagem, atualização sem duplicar e tolerância a erros de download. Os testes HTTP também verificam a leitura interna e a resposta PNG da imagem local.

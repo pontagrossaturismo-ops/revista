@@ -9,6 +9,7 @@ with tempfile.TemporaryDirectory(prefix='revista-http-') as data:
     env.pop('DB_HOST',None)
     with socket.socket() as s: s.bind(('127.0.0.1',0)); port=s.getsockname()[1]
     seed="require 'rss/core.php'; $db=rss_db(); $db->exec(\"INSERT INTO sources(name,url,category) VALUES('Fonte Teste','https://example.com/rss','viagem')\"); rss_store($db,1,rss_parse('<rss><channel><item><title>Notícia &amp; teste</title><link>https://example.com/article</link><description>Resumo</description></item></channel></rss>','https://example.com/rss'));"
+    seed+=" $pixel=base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jX1sAAAAASUVORK5CYII='); $key=rss_cache_image('https://example.com/photo.png',fn($url,$limit)=>[$pixel,$url]); $db->prepare('UPDATE articles SET image=?,image_file=?,body=? WHERE id=1')->execute(['https://example.com/photo.png',$key,\"Corpo completo.\\n\\n<script>unsafe()</script>\"]);"
     subprocess.run([php,'-r',seed],cwd=root,env=env,check=True)
     with tempfile.TemporaryFile(mode='w+') as log:
         server=subprocess.Popen([php,'-d','session.save_path='+data,'-S',f'127.0.0.1:{port}','-t',str(root)],env=env,stdout=log,stderr=log)
@@ -49,6 +50,14 @@ with tempfile.TemporaryDirectory(prefix='revista-http-') as data:
             for path in ['index.php','noticias.php','example_display.php']:
                 status,page=get(path); check(status==200 and 'Notícia &amp; teste' in page,'RSS em '+path)
                 if path!='example_display.php': check('id="noticias-rss"' in page and 'Notícias das fontes RSS' in page,'Bloco RSS identificado em '+path)
+            status,page=get('rss-materia.php?id=1')
+            check(status==200 and 'Corpo completo.' in page and 'Consultar publicação original' in page,'Leitura interna do conteúdo')
+            check('&lt;script&gt;unsafe()&lt;/script&gt;' in page and '<script>unsafe()</script>' not in page,'Conteúdo escapado')
+            check('src="rss-imagem.php?id=1"' in page,'Imagem local na matéria')
+            with client.open(base+'rss-imagem.php?id=1') as response:
+                check(response.status==200 and response.headers['Content-Type']=='image/png' and response.read().startswith(b'\x89PNG'),'Imagem servida como PNG')
+            check(get('rss-materia.php?id=99999')[0]==404,'Matéria inexistente')
+            check(get('rss-imagem.php?id=99999')[0]==404,'Imagem inexistente')
             status,page=get('feed.php'); check(status==200 and '<rss' in page and 'Notícia &amp; teste' in page,'Feed HTTP')
             check(get('feed.php?categoria=invalida')[0]==400,'Categoria inválida')
             check(get('rss-importar.php')[0]==403,'Importação somente CLI')
@@ -56,6 +65,7 @@ with tempfile.TemporaryDirectory(prefix='revista-http-') as data:
             status,page=get('rss-admin.php',{'csrf':csrf,'action':'toggle','id':'1'})
             check('Pausada' in page,'Pausar fonte')
             check('Notícia &amp; teste' not in get('noticias.php')[1],'Ocultar pausadas')
+            check(get('rss-materia.php?id=1')[0]==404 and get('rss-imagem.php?id=1')[0]==404,'Fonte pausada oculta matéria e imagem')
             status,page=get('rss-admin.php',{'csrf':csrf,'action':'logout'})
             check('Fontes cadastradas' not in page and 'Senha' in page,'Logout')
             server.terminate(); server.wait(timeout=5); log.seek(0); logs=log.read()

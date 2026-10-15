@@ -22,6 +22,8 @@ function rss_db() {
     $db->exec('PRAGMA busy_timeout=10000; PRAGMA foreign_keys=ON');
     $db->exec('CREATE TABLE IF NOT EXISTS sources (id INTEGER PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL UNIQUE, category TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, checked_at TEXT, error TEXT)');
     $db->exec('CREATE TABLE IF NOT EXISTS articles (id INTEGER PRIMARY KEY, source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE, identity TEXT NOT NULL, title TEXT NOT NULL, url TEXT NOT NULL, summary TEXT NOT NULL, image TEXT NOT NULL, published_at TEXT NOT NULL, UNIQUE(source_id, identity))');
+    $columns=array_column($db->query('PRAGMA table_info(articles)')->fetchAll(PDO::FETCH_ASSOC),'name');
+    foreach (['body','image_file','image_error'] as $column) if (!in_array($column,$columns,true)) $db->exec('ALTER TABLE articles ADD COLUMN '.$column." TEXT NOT NULL DEFAULT ''");
     return $db;
 }
 function rss_url($url) {
@@ -44,7 +46,7 @@ function rss_resolve($base, $ref) {
     $path = str_starts_with($ref, '/') ? $ref : preg_replace('~/[^/]*$~', '/', $p['path'] ?? '/') . $ref;
     return rss_url($p['scheme'] . '://' . $p['host'] . (isset($p['port']) ? ':' . $p['port'] : '') . $path);
 }
-function rss_fetch($url) {
+function rss_fetch($url,$maxBytes=2097152) {
     for ($redirect=0; $redirect<5; $redirect++) {
         $url = rss_url($url); $p = parse_url($url); $ips = rss_public_ips($p['host']);
         $port = $p['port'] ?? ($p['scheme'] === 'https' ? 443 : 80);
@@ -52,10 +54,10 @@ function rss_fetch($url) {
         $ch = curl_init($url);
         $ip = $ips[0]; if (str_contains($ip, ':')) $ip = '[' . $ip . ']';
         curl_setopt_array($ch, [CURLOPT_FOLLOWLOCATION=>false, CURLOPT_CONNECTTIMEOUT=>5, CURLOPT_TIMEOUT=>15, CURLOPT_PROTOCOLS=>CURLPROTO_HTTP | CURLPROTO_HTTPS, CURLOPT_PROXY=>'', CURLOPT_RESOLVE=>[$p['host'].':'.$port.':'.$ip], CURLOPT_USERAGENT=>'RevistaPG-RSS/1.0', CURLOPT_SSL_VERIFYPEER=>true, CURLOPT_SSL_VERIFYHOST=>2,
-            CURLOPT_WRITEFUNCTION=>function($ch,$chunk) use (&$body,&$overflow) { if (strlen($body)+strlen($chunk)>2*1024*1024) { $overflow=true; return 0; } $body.=$chunk; return strlen($chunk); },
+            CURLOPT_WRITEFUNCTION=>function($ch,$chunk) use (&$body,&$overflow,$maxBytes) { if (strlen($body)+strlen($chunk)>$maxBytes) { $overflow=true; return 0; } $body.=$chunk; return strlen($chunk); },
             CURLOPT_HEADERFUNCTION=>function($ch,$line) use (&$location) { if (stripos($line,'Location:')===0) $location=trim(substr($line,9)); return strlen($line); }]);
         $ok = curl_exec($ch); $code = curl_getinfo($ch,CURLINFO_HTTP_CODE); $error=curl_error($ch); curl_close($ch);
-        if ($overflow) throw new RuntimeException('Feed excede 2 MB.');
+        if ($overflow) throw new RuntimeException('Resposta excede o limite de tamanho.');
         if ($ok === false) throw new RuntimeException('Falha ao buscar feed: ' . $error);
         if ($code>=300 && $code<400 && $location) { $url=rss_resolve($url,$location); continue; }
         if ($code!==200) throw new RuntimeException('Feed retornou HTTP '.$code);
@@ -80,29 +82,92 @@ function rss_parse($xml, $base) {
         if ($atom) foreach ($node->xpath('./*[local-name()="link"]') as $l) if (!isset($l['rel']) || (string)$l['rel']==='alternate') { $link=(string)$l['href']; break; }
         try { $link=rss_resolve($base,$link); } catch (Throwable $e) { continue; }
         if (!$title || !$link) continue;
-        $raw=(string)($get('description') ?: ($get('summary') ?: ($get('encoded') ?: $get('content'))));
+        $raw=(string)($get('description') ?: $get('summary'));
+        $full=(string)($get('encoded') ?: $get('content'));
+        if (!$raw) $raw=$full;
         $image='';
-        foreach ($node->xpath('./*[local-name()="thumbnail" or local-name()="content" or local-name()="enclosure"]') as $m) {
-            if (isset($m['url']) && ($m->getName()!=='enclosure' || str_starts_with((string)$m['type'],'image/'))) { $image=(string)$m['url']; break; }
+        foreach ($node->xpath('.//*[local-name()="thumbnail" or local-name()="content" or local-name()="enclosure"]') as $m) {
+            $type=(string)$m['type']; $medium=(string)$m['medium'];
+            if (isset($m['url']) && (!$type || str_starts_with($type,'image/')) && (!$medium || $medium==='image')) { $image=(string)$m['url']; break; }
         }
-        if (!$image && preg_match('/<img[^>]+src=["\x27]([^"\x27]+)/i',$raw,$match)) $image=html_entity_decode($match[1],ENT_QUOTES,'UTF-8');
-        try { $image=rss_resolve($base,$image); } catch (Throwable $e) { $image=''; }
+        if (!$image) $image=rss_html_image($full ?: $raw);
+        if (!$image && $full) $image=rss_html_image($raw);
+        try { $image=rss_resolve($link,$image); } catch (Throwable $e) { $image=''; }
         $date=(string)($get('pubDate') ?: ($get('published') ?: ($get('updated') ?: $get('date'))));
         $stamp=strtotime($date); if (!$stamp || $stamp>time()+86400) $stamp=time();
-        $items[]=['identity'=>hash('sha256',(string)($get('guid') ?: ($get('id') ?: $link))), 'title'=>$title,'url'=>$link,'summary'=>rss_text($raw),'image'=>$image,'published_at'=>gmdate('Y-m-d H:i:s',$stamp)];
+        $items[]=['identity'=>hash('sha256',(string)($get('guid') ?: ($get('id') ?: $link))), 'title'=>$title,'url'=>$link,'summary'=>rss_body_text($raw),'body'=>rss_body_text($full ?: $raw),'image'=>$image,'published_at'=>gmdate('Y-m-d H:i:s',$stamp)];
     }
     return $items;
 }
-function rss_store($db,$source,$items) {
-    $stmt=$db->prepare('INSERT INTO articles(source_id,identity,title,url,summary,image,published_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(source_id,identity) DO UPDATE SET title=excluded.title,url=excluded.url,summary=excluded.summary,image=excluded.image');
-    $db->beginTransaction();
-    try { foreach ($items as $i) $stmt->execute([$source,$i['identity'],$i['title'],$i['url'],$i['summary'],$i['image'],$i['published_at']]); $db->commit(); } catch (Throwable $e) { $db->rollBack(); throw $e; }
+function rss_html_document($html) {
+    $doc=new DOMDocument(); $previous=libxml_use_internal_errors(true);
+    try { $doc->loadHTML('<?xml encoding="UTF-8"><html><body>'.$html.'</body></html>', LIBXML_NONET); }
+    finally { libxml_clear_errors(); libxml_use_internal_errors($previous); }
+    foreach (['script','style','iframe','object','noscript'] as $tag) while ($node=$doc->getElementsByTagName($tag)->item(0)) $node->parentNode->removeChild($node);
+    return $doc;
 }
-function rss_refresh(?callable $fetcher=null) {
+function rss_html_image($html) {
+    if (!$html) return '';
+    $doc=rss_html_document($html);
+    foreach ($doc->getElementsByTagName('img') as $img) {
+        foreach (['data-src','src'] as $attribute) {
+            $value=trim($img->getAttribute($attribute));
+            if ($value && !str_starts_with($value,'data:')) return $value;
+        }
+        $srcset=$img->getAttribute('srcset');
+        if ($srcset) return preg_split('/\s+/',trim(explode(',',$srcset)[0]))[0];
+    }
+    return '';
+}
+function rss_body_text($html) {
+    if (!$html) return '';
+    $doc=rss_html_document($html);
+    foreach (['p','div','br','li','h1','h2','h3','blockquote'] as $tag) foreach (iterator_to_array($doc->getElementsByTagName($tag)) as $node) $node->appendChild($doc->createTextNode("\n\n"));
+    return trim(preg_replace('/\n[ \t]*\n(?:[ \t]*\n)+/',"\n\n",$doc->getElementsByTagName('body')->item(0)->textContent ?? ''));
+}
+function rss_image_info($bytes) {
+    $info=@getimagesizefromstring($bytes);
+    if (!$info || !in_array($info['mime'] ?? '',['image/jpeg','image/png','image/gif','image/webp'],true) || $info[0]*$info[1]>40000000) throw new RuntimeException('Formato de imagem inválido ou dimensões excessivas.');
+    return $info;
+}
+function rss_cache_image($url,?callable $fetcher=null) {
+    $dir=rss_data_dir().'/images';
+    if (!is_dir($dir) && !mkdir($dir,0700,true)) throw new RuntimeException('Sem permissão para salvar imagens.');
+    $key=hash('sha256',$url); $file=$dir.'/'.$key;
+    if (is_file($file)) return $key;
+    [$bytes]=($fetcher ?? 'rss_fetch')($url,5*1024*1024);
+    if (strlen($bytes)>5*1024*1024) throw new RuntimeException('Imagem excede 5 MB.');
+    rss_image_info($bytes);
+    $temp=tempnam($dir,'.image-');
+    try {
+        if (!$temp || file_put_contents($temp,$bytes,LOCK_EX)===false || !rename($temp,$file)) throw new RuntimeException('Não foi possível gravar imagem.');
+        chmod($file,0600);
+    } finally { if ($temp && is_file($temp)) unlink($temp); }
+    return $key;
+}
+function rss_image_src($article) {
+    return !empty($article['image_file']) ? 'rss-imagem.php?id='.(int)$article['id'] : $article['image'];
+}
+function rss_store($db,$source,$items) {
+    $stmt=$db->prepare('INSERT INTO articles(source_id,identity,title,url,summary,image,published_at,body,image_file,image_error) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(source_id,identity) DO UPDATE SET title=excluded.title,url=excluded.url,summary=excluded.summary,image=excluded.image,body=excluded.body,image_file=CASE WHEN excluded.image_file=\'\' AND articles.image=excluded.image THEN articles.image_file ELSE excluded.image_file END,image_error=excluded.image_error');
+    $db->beginTransaction();
+    try { foreach ($items as $i) $stmt->execute([$source,$i['identity'],$i['title'],$i['url'],$i['summary'],$i['image'],$i['published_at'],$i['body'] ?? $i['summary'],$i['image_file'] ?? '',$i['image_error'] ?? '']); $db->commit(); } catch (Throwable $e) { $db->rollBack(); throw $e; }
+}
+function rss_refresh(?callable $fetcher=null,?callable $imageImporter=null) {
     $fetcher=$fetcher ?? 'rss_fetch';
     $db=rss_db(); $results=[];
     foreach ($db->query('SELECT * FROM sources WHERE active=1') as $s) {
-        try { [$xml,$url]=$fetcher($s['url']); $items=rss_parse($xml,$url); rss_store($db,$s['id'],$items); $error=null; $results[]=$s['name'].': '.count($items).' itens processados'; }
+        try { [$xml,$url]=$fetcher($s['url']); $items=rss_parse($xml,$url);
+            foreach ($items as &$item) {
+                if (!$item['image']) continue;
+                try { $item['image_file']=($imageImporter ?? 'rss_cache_image')($item['image']); }
+                catch (Throwable $e) { $item['image_error']=$e->getMessage(); }
+            }
+            unset($item);
+            rss_store($db,$s['id'],$items); $error=null;
+            $downloaded=count(array_filter($items,fn($item)=>!empty($item['image_file'])));
+            $failed=count(array_filter($items,fn($item)=>!empty($item['image_error'])));
+            $results[]=$s['name'].': '.count($items).' itens processados | imagens locais: '.$downloaded.' | falhas de imagem: '.$failed; }
         catch (Throwable $e) { $error=$e->getMessage(); $results[]=$s['name'].': ERRO — '.$error; }
         $db->prepare('UPDATE sources SET checked_at=?,error=? WHERE id=?')->execute([gmdate('Y-m-d H:i:s'),$error,$s['id']]);
     }
@@ -117,8 +182,8 @@ function rss_cards($category=null,$limit=9) {
         foreach ($stmt as $a) {
             $count++;
             echo '<article class="noticia-card">';
-            if ($a['image']) echo '<img loading="lazy" src="'.rss_escape($a['image']).'" alt="'.rss_escape($a['title']).'">';
-            echo '<div class="noticia-content"><span class="noticia-categoria">'.rss_escape($a['category']).'</span><h3><a href="'.rss_escape($a['url']).'" target="_blank" rel="noopener noreferrer">'.rss_escape($a['title']).'</a></h3><p class="noticia-resumo">'.rss_escape($a['summary']).'</p><div class="noticia-meta"><small>Fonte: '.rss_escape($a['name']).'</small><a class="ler-mais" href="'.rss_escape($a['url']).'" target="_blank" rel="noopener noreferrer">Ler na fonte</a></div></div></article>';
+            if ($a['image']) echo '<img loading="lazy" src="'.rss_escape(rss_image_src($a)).'" alt="'.rss_escape($a['title']).'">';
+            echo '<div class="noticia-content"><span class="noticia-categoria">'.rss_escape($a['category']).'</span><h3><a href="rss-materia.php?id='.(int)$a['id'].'">'.rss_escape($a['title']).'</a></h3><p class="noticia-resumo">'.rss_escape($a['summary']).'</p><div class="noticia-meta"><small>Fonte: '.rss_escape($a['name']).'</small><a class="ler-mais" href="rss-materia.php?id='.(int)$a['id'].'">Ler mais</a></div></div></article>';
         }
     } catch (Throwable $e) { error_log('RSS: '.$e->getMessage()); return null; }
     return $count;

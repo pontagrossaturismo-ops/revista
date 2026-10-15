@@ -33,7 +33,7 @@ $db->exec('UPDATE sources SET active=0'); ob_start(); rss_cards(); check(ob_get_
 $db->exec('UPDATE sources SET active=1');
 ob_start(); include dirname(__DIR__).'/feed.php'; $feed=ob_get_clean(); check(simplexml_load_string($feed)!==false && str_contains($feed,'Título atualizado'),'RSS exportado válido');
 $db->exec("INSERT INTO sources(name,url,category) VALUES('Fonte inválida','https://example.com/broken','lazer')");
-$results=rss_refresh(function($url) use ($fixture) { return [str_ends_with($url,'broken') ? '<html/>' : $fixture, $url]; });
+$results=rss_refresh(function($url) use ($fixture) { return [str_ends_with($url,'broken') ? '<html/>' : $fixture, $url]; },fn($url)=>'');
 check(count($results)===2,'Todas as fontes processadas');
 check($db->query('SELECT error FROM sources WHERE id=1')->fetchColumn()===null,'Sucesso registrado');
 check((bool)$db->query('SELECT error FROM sources WHERE id=2')->fetchColumn(),'Falha registrada separadamente');
