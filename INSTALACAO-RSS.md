@@ -48,7 +48,7 @@ Os cards e o CSS atuais são mantidos. A página inicial e categorias exibem pri
 
 `feed.php` exporta notícias importadas e aceita `?categoria=viagem` e demais categorias. As rotas antigas `g1_turismo_rss.php` e `g1_turismo_generate_rss.php` exportam a categoria viagem; para receber G1, cadastre sua URL RSS no painel. `example_display.php` e `display.php` usam o armazenamento local. O proxy de páginas foi desativado.
 
-A importação verifica TLS, protocolos, DNS/IPs públicos e cada redirecionamento; limita respostas a 2 MB/100 itens e bloqueia DTD/entidades XML. Precisa de DNS e saída HTTP/HTTPS direta para as fontes. URLs devem ser de feeds, não páginas iniciais. Recomenda-se limitar tentativas de login pelo servidor. Não há retenção global automática: monitore SQLite e backups.
+A importação verifica TLS, protocolos, DNS/IPs públicos e cada redirecionamento; limita respostas a 2 MB/100 itens e bloqueia DTD/entidades XML. Precisa de DNS e saída HTTP/HTTPS direta para as fontes. URLs devem ser de feeds, não páginas iniciais. Recomenda-se limitar tentativas de login pelo servidor. A retenção automática mantém até 90 notícias RSS por categoria; monitore também arquivos e backups.
 
 ## Alternativa: variáveis de ambiente
 
@@ -62,7 +62,7 @@ PHP_BIN=php python3 tests/http-test.py
 PHP_BIN=php python3 tests/setup-test.py
 ```
 
-Neste ambiente passaram 24 verificações RSS, 41 HTTP e 27 do instalador, além da sintaxe PHP. As verificações do instalador cobrem ativação, autenticação, campos, falha de conexão, persistência privada, consumo do código e intervalo de cron. O sucesso de uma conexão MySQL real não foi testado: o domínio informado não resolveu neste ambiente (erro 2002). Uma busca RSS externa também falhou em DNS. A conexão real, feeds e agendamento precisam ser confirmados na hospedagem. Imagens e edições originais não foram fornecidas para teste.
+Neste ambiente passaram 24 verificações RSS, 49 HTTP e 27 do instalador, além da sintaxe PHP. As verificações do instalador cobrem ativação, autenticação, campos, falha de conexão, persistência privada, consumo do código e intervalo de cron. O sucesso de uma conexão MySQL real não foi testado: o domínio informado não resolveu neste ambiente (erro 2002). Uma busca RSS externa também falhou em DNS. A conexão real, feeds e agendamento precisam ser confirmados na hospedagem. Imagens e edições originais não foram fornecidas para teste.
 
 ## Testar no XAMPP/Windows
 
@@ -113,7 +113,7 @@ Os cards abrem `rss-materia.php?id=...` na mesma aba, usando o layout atual. A p
 
 São reconhecidas imagens em media:content/media:thumbnail (inclusive grupos), enclosure, image/url, Atom XHTML e imagens no HTML de description/content:encoded, incluindo campos de carregamento tardio e HTML com entidades adicionais. Quando o feed não fornecer uma foto reconhecida, o importador consulta a página pública da matéria e procura og:image, twitter:image, image_src ou uma imagem dentro de article. Não seleciona um logo genérico fora do artigo. A imagem principal é baixada para `images` dentro do armazenamento RSS privado e servida por `rss-imagem.php`, sem expor a pasta. Imagens JPEG, PNG, GIF e WebP são aceitas, com limite de 5 MB e 40 milhões de pixels. Certificados e validação de destino continuam ativos. A primeira atualização pode demorar devido aos downloads.
 
-Falha ao baixar uma imagem não impede armazenar o texto, mas a matéria fica oculta do site até que uma foto válida seja baixada. Não há mais alternativa com imagem remota. Itens cujo feed não forneça imagem também ficam ocultos. O terminal e o painel mostram falhas de imagens por fonte. O texto é exibido escapado, com parágrafos, sem executar HTML/scripts do feed. Inclua a pasta images nos backups; não há limpeza automática de imagens antigas.
+Falha ao baixar uma imagem não impede armazenar o texto, mas a matéria fica oculta do site até que uma foto válida seja baixada. Não há mais alternativa com imagem remota. Itens cujo feed não forneça imagem também ficam ocultos. O terminal e o painel mostram falhas de imagens por fonte. O texto é exibido escapado, com parágrafos, sem executar HTML/scripts do feed. Inclua a pasta images nos backups; a retenção remove imagens dos itens excluídos apenas quando não têm outras referências.
 
 Os testes adicionais `php tests/media-test.php` verificam migração de base antiga, conteúdo completo, extração/cache/validação de imagem, atualização sem duplicar e tolerância a erros de download. Os testes HTTP também verificam a leitura interna e a resposta PNG da imagem local.
 
@@ -127,7 +127,7 @@ Acesse `rss-admin.php` com a senha existente. Atualize também `rss-admin.css` e
 - O histórico contém uma linha por fonte/tentativa, data UTC, URL utilizada, resultado, quantidade processada, itens novos, existentes reprocessados, erros de imagem e mensagem de falha do feed. O filtro seleciona uma fonte; a tabela mostra as 100 últimas linhas. Os totais abrangem todo o histórico mantido.
 - O histórico começa na atualização. Importações anteriores continuam armazenadas, mas não são contadas como execuções históricas inventadas. Reprocessar um item existente não aumenta o contador de novos.
 - Somente notícias RSS com arquivo de foto **local, legível e válido** aparecem nos cards, nas páginas internas e no feed XML de saída. Sem foto, download bloqueado, arquivo removido ou corrompido: a matéria fica oculta. Uma foto local válida já baixada pode continuar sendo usada se uma tentativa posterior de download da mesma URL falhar.
-- Itens ocultos permanecem armazenados e podem ser recuperados por nova execução do importador. Execute `rss-importar.php --force` no XAMPP para preencher fotos e iniciar o histórico desta versão. Não apague a configuração ou o banco.
+- Itens ocultos permanecem armazenados dentro do limite de 90 notícias por categoria e podem ser recuperados por nova execução do importador. Execute `rss-importar.php --force` no XAMPP para preencher fotos e iniciar o histórico desta versão. Não apague a configuração ou o banco.
 - Pausar oculta as notícias da fonte. Excluir remove a fonte, notícias e histórico associados; os arquivos de imagem privados não são limpos automaticamente.
 
 Os testes `php tests/management-test.php` cobrem edição, preservação de notícias/histórico, contagem de novos e existentes, erros de feed/imagem, fotos ausentes/corrompidas e exclusão. O teste HTTP cobre também edição autenticada, mudança de categoria e ocultação por link direto.
@@ -151,3 +151,18 @@ Se aparecer a mensagem de conexão ausente, abra `instalar.php`, entre com sua s
 As páginas do guia agora tratam ausência/falha de conexão sem mostrar exceção ou stack trace ao visitante, e não consultam mais a tabela de notícias para montar o cabeçalho. A falta de configuração continua exigindo preencher os dados; uma mensagem tratada não significa que os estabelecimentos foram recuperados. As imagens/logos originais precisam existir nas pastas do site.
 
 O importador agora imprime início, fonte, posição do item, busca da foto, erros e resultado por fonte. Antes, ele só mostrava resultados depois de terminar todas as fontes; uma execução com muitas páginas sem foto podia ficar vários minutos sem saída. A ausência de um novo prompt no terminal indica que o processo ainda não devolveu o controle. Aguarde o progresso; se quiser substituir os arquivos durante uma execução antiga, interrompa essa execução com **Ctrl+C**, atualize o código e execute novamente. Não inicie processos adicionais em paralelo: o bloqueio impedirá importações concorrentes. Nas próximas execuções, imagens válidas já baixadas podem ser reaproveitadas.
+
+
+## Paginação, limite por categoria e demais guias
+
+O filtro “Todas” foi removido. `noticias.php` continua como entrada geral pelo menu Notícias; as abas levam diretamente a Viagem, Lazer, Gastronomia, Eventos e Esporte. As listagens têm no máximo **15 cards por página e 6 páginas**. Os botões Anterior/Próxima, números e indicação da página atual se adaptam ao celular. Atualize também `news-pagination.css` e `header.php`.
+
+O limite de 15 inclui RSS e matérias editoriais: RSS aparece primeiro, seguido das matérias MySQL que couberem nas 90 posições da listagem. As duas bases não são ordenadas em conjunto. A página inicial mantém sua seção resumida.
+
+Ao terminar uma importação, o sistema **exclui permanentemente** as notícias RSS mais antigas que excederem 90 registros por categoria, somando todas as fontes dessa categoria. A ordem é data de publicação e ID como desempate; inclui registros ocultos ou de fontes pausadas. Alterar uma fonte também aplica a limpeza, inclusive quando ela é movida para uma categoria que já atingiu o limite. Faça backup antes da primeira execução com esta atualização se quiser preservar o histórico de matérias antigas. As matérias editoriais da tabela MySQL `materia` não são apagadas. O histórico das importações é preservado; imagens das notícias excluídas são removidas somente se nenhum outro registro as utiliza.
+
+Para aplicar o limite à base existente, atualize os arquivos e execute novamente `rss-importar.php --force`. Sem nova importação, a listagem já limita as posições a 90, mas registros anteriores ainda podem estar armazenados até a limpeza. Fontes podem reenviar itens antigos: o limite continua sendo reaplicado ao fim de cada execução.
+
+Foram adicionados `indicador-compras.php`, `indicador-hospedagem.php` e o endereço compatível `indicador-hospedage.php`. Todos usam `guia/listing.php` com o mesmo banco `DB_CONV` e a tabela `lojas`. Os filtros são `categoria = compras`, `categoria = hospedagem` e `categoria = gastronomia`. Se a conexão estiver correta mas não houver estabelecimentos nessas categorias, será exibida uma mensagem de lista vazia. Envie também a pasta `guia`, além dos arquivos das páginas.
+
+Execute `php tests/pagination-test.php` para verificar limite por categoria, ordenação, descarte, preservação de fotos compartilhadas, histórico e limites da paginação. Os testes HTTP verificam os 15 cards, a sexta página, os links do navegador e a existência das três rotas de guia novas/compatíveis; não foi possível confirmar o conteúdo do MySQL real neste ambiente.

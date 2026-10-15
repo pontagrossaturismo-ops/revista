@@ -6,7 +6,7 @@ function revista_manual_news($category=null,$limit=54) {
         include dirname(__DIR__).'/log.php';
         $sql='SELECT * FROM materia'; $params=[];
         if ($category) { $sql.=' WHERE categoria=?'; $params[]=$category; }
-        $stmt=$mysqli->prepare($sql.' ORDER BY id DESC LIMIT '.max(1,min(54,(int)$limit)));
+        $stmt=$mysqli->prepare($sql.' ORDER BY id DESC LIMIT '.max(1,min(90,(int)$limit)));
         if ($category) $stmt->bind_param('s',$category);
         $stmt->execute(); $rows=$stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         $stmt->close(); $mysqli->close(); return $rows;

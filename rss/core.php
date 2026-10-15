@@ -186,6 +186,33 @@ function rss_store($db,$source,$items) {
     $db->beginTransaction();
     try { foreach ($items as $i) $stmt->execute([$source,$i['identity'],$i['title'],$i['url'],$i['summary'],$i['image'],$i['published_at'],$i['body'] ?? $i['summary'],$i['image_file'] ?? '',$i['image_error'] ?? '']); $db->commit(); } catch (Throwable $e) { $db->rollBack(); throw $e; }
 }
+function rss_prune($db=null) {
+    $db=$db ?? rss_db(); $removed=0; $files=[];
+    $db->beginTransaction();
+    try {
+        $categories=$db->query('SELECT DISTINCT category FROM sources')->fetchAll(PDO::FETCH_COLUMN);
+        $find=$db->prepare('SELECT a.id,a.image_file FROM articles a JOIN sources s ON s.id=a.source_id WHERE s.category=? ORDER BY a.published_at DESC,a.id DESC LIMIT -1 OFFSET 90');
+        $delete=$db->prepare('DELETE FROM articles WHERE id=?');
+        foreach ($categories as $category) {
+            $find->execute([$category]); $older=$find->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($older as $article) { $delete->execute([$article['id']]); $removed++; if ($article['image_file']) $files[$article['image_file']]=true; }
+        }
+        $db->commit();
+    } catch(Throwable $e) { $db->rollBack(); throw $e; }
+    $references=$db->prepare('SELECT 1 FROM articles WHERE image_file=? LIMIT 1');
+    foreach (array_keys($files) as $key) {
+        if (!preg_match('/^[a-f0-9]{64}$/',$key)) continue;
+        $references->execute([$key]);
+        if (!$references->fetchColumn()) { $file=rss_data_dir().'/images/'.$key; if (is_file($file) && !unlink($file)) error_log('RSS: não foi possível remover imagem antiga.'); }
+    }
+    return $removed;
+}
+function rss_paginate($entries,$requestedPage=1) {
+    $entries=array_slice($entries,0,90); $total=count($entries); $pages=max(1,(int)ceil($total/15));
+    $requested=filter_var($requestedPage,FILTER_VALIDATE_INT);
+    $page=max(1,min($pages,$requested===false ? 1 : $requested));
+    return ['items'=>array_slice($entries,($page-1)*15,15),'page'=>$page,'pages'=>$pages,'total'=>$total];
+}
 function rss_refresh(?callable $fetcher=null,?callable $imageImporter=null,?callable $pageFetcher=null,?callable $progress=null) {
     $fetcher=$fetcher ?? 'rss_fetch';
     $db=rss_db(); $results=[];
@@ -227,6 +254,8 @@ function rss_refresh(?callable $fetcher=null,?callable $imageImporter=null,?call
         $db->prepare('INSERT INTO import_runs(source_id,source_url,finished_at,status,processed,created,existing,image_errors,error) VALUES(?,?,?,?,?,?,?,?,?)')->execute([$s['id'],$s['url'],$at,$status,$processed,$created,$existing,$failed,$error]);
         if ($progress) $progress($results[count($results)-1]);
     }
+    $removed=rss_prune($db);
+    if ($removed && $progress) $progress('Limpeza: '.$removed.' notícias antigas excluídas (máximo 90 por categoria).');
     return $results;
 }
 function rss_has_image($article) {
@@ -258,18 +287,22 @@ function rss_save_source($id,$name,$url,$category) {
         if (!$stmt->fetchColumn()) throw new InvalidArgumentException('Fonte não encontrada.');
         $db->prepare('UPDATE sources SET name=?,url=?,category=?,error=CASE WHEN url<>? THEN NULL ELSE error END,checked_at=CASE WHEN url<>? THEN NULL ELSE checked_at END WHERE id=?')->execute([$name,$url,$category,$url,$url,$id]);
     } else $db->prepare('INSERT INTO sources(name,url,category) VALUES(?,?,?)')->execute([$name,$url,$category]);
+    rss_prune($db);
 }
 function rss_cards($category=null,$limit=9) {
     $count=0;
     try {
         foreach (rss_public_articles($category,$limit) as $a) {
             $count++;
-            echo '<article class="noticia-card">';
-            if ($a['image']) echo '<img loading="lazy" src="'.rss_escape(rss_image_src($a)).'" alt="'.rss_escape($a['title']).'">';
-            echo '<div class="noticia-content"><span class="noticia-categoria">'.rss_escape($a['category']).'</span><h3><a href="rss-materia.php?id='.(int)$a['id'].'">'.rss_escape($a['title']).'</a></h3><p class="noticia-resumo">'.rss_escape($a['summary']).'</p><div class="noticia-meta"><small>Fonte: '.rss_escape($a['name']).'</small><a class="ler-mais" href="rss-materia.php?id='.(int)$a['id'].'">Ler mais</a></div></div></article>';
+            rss_render_card($a);
         }
     } catch (Throwable $e) { error_log('RSS: '.$e->getMessage()); return null; }
     return $count;
+}
+function rss_render_card($a) {
+            echo '<article class="noticia-card">';
+            if ($a['image']) echo '<img loading="lazy" src="'.rss_escape(rss_image_src($a)).'" alt="'.rss_escape($a['title']).'">';
+            echo '<div class="noticia-content"><span class="noticia-categoria">'.rss_escape($a['category']).'</span><h3><a href="rss-materia.php?id='.(int)$a['id'].'">'.rss_escape($a['title']).'</a></h3><p class="noticia-resumo">'.rss_escape($a['summary']).'</p><div class="noticia-meta"><small>Fonte: '.rss_escape($a['name']).'</small><a class="ler-mais" href="rss-materia.php?id='.(int)$a['id'].'">Ler mais</a></div></div></article>';
 }
 function rss_section($category=null,$limit=9) {
     echo '<section class="ultimas-noticias" id="noticias-rss"><h2 class="section-title">Notícias das fontes RSS</h2><div class="noticias-grid">';

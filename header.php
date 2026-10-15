@@ -15,6 +15,7 @@
     
     <!-- CSS -->
     <link rel="stylesheet" href="style.css">
+    <?php foreach (($pageStyles ?? []) as $stylesheet): ?><link rel="stylesheet" href="<?=htmlspecialchars($stylesheet, ENT_QUOTES, 'UTF-8')?>"><?php endforeach; ?>
     
     <!-- Fontes -->
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">

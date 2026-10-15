@@ -1,0 +1,34 @@
+<?php
+$dir=sys_get_temp_dir().'/revista-pagination-'.bin2hex(random_bytes(6)); mkdir($dir,0700); putenv('RSS_DATA_DIR='.$dir); putenv('REVISTA_CONFIG_DIR='.$dir);
+require dirname(__DIR__).'/rss/core.php';
+$count=0;
+function page_check($ok,$message) { global $count; if (!$ok) throw new RuntimeException($message); $count++; }
+$db=rss_db();
+rss_save_source(0,'Viagem A','https://example.com/a','viagem'); rss_save_source(0,'Viagem B','https://example.com/b','viagem'); rss_save_source(0,'Lazer','https://example.com/c','lazer');
+$png=base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jX1sAAAAASUVORK5CYII=');
+$cache=fn($url)=>rss_cache_image($url,fn($u,$max)=>[$png,$u]); $shared=$cache('https://example.com/shared.png'); $old=$cache('https://example.com/old.png'); $unshared=$cache('https://example.com/unused.png');
+$groups=[1=>[],2=>[],3=>[]];
+for($i=0;$i<95;$i++) $groups[$i%2+1][]=['identity'=>'travel-'.$i,'title'=>'Viagem '.$i,'url'=>'https://example.com/travel/'.$i,'summary'=>'Resumo','image'=>'https://example.com/photo.png','image_file'=>$i===0?$old:($i===1?$unshared:$shared),'published_at'=>gmdate('Y-m-d H:i:s',strtotime('2026-01-01 UTC')+$i)];
+for($i=0;$i<10;$i++) $groups[3][]=['identity'=>'lazer-'.$i,'title'=>'Lazer '.$i,'url'=>'https://example.com/lazer/'.$i,'summary'=>'Resumo','image'=>'https://example.com/old.png','image_file'=>$old,'published_at'=>'2026-01-01 00:00:00'];
+foreach($groups as $source=>$items) rss_store($db,$source,$items);
+$db->exec("INSERT INTO import_runs(source_id,source_url,finished_at,status,processed) VALUES(1,'https://example.com/a','2026-01-01','success',48)");
+page_check(rss_prune($db)===5,'Excluir excedente agregado de múltiplas fontes da mesma categoria');
+page_check(count(rss_public_articles('viagem',null))===90 && count(rss_public_articles('lazer',null))===10,'Retenção isolada por categoria');
+$travel=rss_public_articles('viagem',null); page_check($travel[0]['title']==='Viagem 94' && $travel[89]['title']==='Viagem 5','Excluir apenas as mais antigas');
+page_check(!is_file($dir.'/images/'.$unshared),'Eliminar arquivo sem referências das notícias excluídas');
+page_check(is_file($dir.'/images/'.$old),'Preservar arquivo compartilhado com outra categoria');
+page_check((int)$db->query('SELECT count(*) FROM import_runs')->fetchColumn()===1,'Preservar histórico na limpeza');
+$first=rss_paginate($travel,1); $last=rss_paginate($travel,6);
+page_check($first['pages']===6 && count($first['items'])===15 && count($last['items'])===15,'Seis páginas de quinze notícias');
+page_check($first['items'][0]['id']!==$last['items'][0]['id'] && $last['items'][14]['title']==='Viagem 5','Páginas sem repetição e última notícia correta');
+page_check(rss_paginate($travel,999)['page']===6 && rss_paginate($travel,-1)['page']===1,'Limitar páginas fora da faixa');
+page_check(rss_paginate($travel,['bad'])['page']===1 && rss_paginate($travel,'texto')['page']===1,'Parâmetro inválido seguro');
+page_check(rss_paginate([],1)['pages']===1 && rss_paginate([],1)['items']===[],'Categoria vazia');
+page_check(rss_paginate(range(1,100),6)['total']===90 && count(rss_paginate(range(1,100),6)['items'])===15,'Não gerar sétima página mesmo antes da limpeza');
+page_check(rss_paginate(range(1,16),2)['items']===[16],'Última página parcial');
+page_check(rss_prune($db)===0,'Limpeza repetível sem apagar notícias adicionais');
+rss_save_source(3,'Lazer movido','https://example.com/c','viagem');
+page_check(count(rss_public_articles('viagem',null))===90 && count(rss_public_articles('lazer',null))===0,'Mudança de categoria aplica o mesmo limite');
+page_check(!is_file($dir.'/images/'.$old),'Remover imagem compartilhada somente após sumirem todas as referências');
+foreach(glob($dir.'/images/*') as $f) unlink($f); rmdir($dir.'/images'); $db=null; foreach(glob($dir.'/*') as $f) unlink($f); rmdir($dir);
+echo "$count verificações de paginação e retenção passaram.\n";
