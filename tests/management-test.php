@@ -1,0 +1,40 @@
+<?php
+$dir=sys_get_temp_dir().'/revista-management-'.bin2hex(random_bytes(6)); mkdir($dir,0700);
+putenv('RSS_DATA_DIR='.$dir); putenv('REVISTA_CONFIG_DIR='.$dir);
+require dirname(__DIR__).'/rss/core.php';
+$count=0;
+function manage_check($ok,$message) { global $count; if (!$ok) throw new RuntimeException($message); $count++; }
+$db=rss_db(); rss_save_source(0,'Fonte','https://example.com/rss','viagem');
+$fixture='<rss><channel><item><guid>1</guid><title>Com foto</title><link>https://example.com/photo</link><description><![CDATA[<img src="https://example.com/photo.png">]]></description></item><item><guid>2</guid><title>Sem foto</title><link>https://example.com/no-photo</link></item><item><guid>3</guid><title>Foto bloqueada</title><link>https://example.com/bad-photo</link><description><![CDATA[<img src="https://example.com/bad.png">]]></description></item></channel></rss>';
+$png=base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jX1sAAAAASUVORK5CYII=');
+$importImage=function($url) use ($png) { if (str_ends_with($url,'bad.png')) throw new RuntimeException('HTTP 403'); return rss_cache_image($url,fn($u,$max)=>[$png,$u]); };
+rss_refresh(fn($u)=>[$fixture,$u],$importImage);
+$run=$db->query('SELECT * FROM import_runs')->fetch(PDO::FETCH_ASSOC);
+manage_check($run['status']==='partial' && (int)$run['processed']===3 && (int)$run['created']===3 && (int)$run['existing']===0 && (int)$run['image_errors']===1,'Registrar números reais de importação');
+$public=rss_public_articles(); manage_check(count($public)===1 && $public[0]['title']==='Com foto','Somente foto local válida publica');
+manage_check(rss_status()['articles']===3 && rss_status()['visible']===1,'Contagem distingue armazenadas e publicadas');
+ob_start(); rss_cards(); $cards=ob_get_clean(); manage_check(str_contains($cards,'Com foto') && !str_contains($cards,'Sem foto') && !str_contains($cards,'Foto bloqueada'),'Cards ocultam itens sem foto ou download bloqueado');
+ob_start(); include dirname(__DIR__).'/feed.php'; $feed=ob_get_clean(); manage_check(str_contains($feed,'Com foto') && !str_contains($feed,'Sem foto') && !str_contains($feed,'Foto bloqueada'),'Exportação aplica regra de imagem');
+rss_refresh(fn($u)=>[$fixture,$u],$importImage); $last=$db->query('SELECT * FROM import_runs ORDER BY id DESC')->fetch(PDO::FETCH_ASSOC);
+manage_check((int)$last['created']===0 && (int)$last['existing']===3 && (int)$db->query('SELECT count(*) FROM articles')->fetchColumn()===3,'Reimportar sem inflar novos cadastros');
+rss_save_source(1,'Nome alterado','https://example.com/novo-feed','lazer');
+$source=$db->query('SELECT * FROM sources WHERE id=1')->fetch(PDO::FETCH_ASSOC);
+manage_check($source['name']==='Nome alterado' && $source['url']==='https://example.com/novo-feed' && $source['category']==='lazer','Editar nome URL e categoria no mesmo ID');
+manage_check(count(rss_public_articles('viagem'))===0 && count(rss_public_articles('lazer'))===1,'Categoria move itens já importados');
+manage_check((int)$db->query('SELECT count(*) FROM import_runs')->fetchColumn()===2 && $db->query('SELECT source_url FROM import_runs LIMIT 1')->fetchColumn()==='https://example.com/rss','Preservar histórico e URL utilizada');
+rss_save_source(0,'Outra','https://example.com/outra','noticias'); $duplicate=false;
+try { rss_save_source(1,'Duplicada','https://example.com/outra','lazer'); } catch(PDOException $e) { $duplicate=true; }
+manage_check($duplicate && $db->query('SELECT name FROM sources WHERE id=1')->fetchColumn()==='Nome alterado','URL duplicada não altera fonte existente');
+rss_refresh(fn($u)=>throw new RuntimeException('Feed HTTP 403'),$importImage);
+manage_check((int)$db->query("SELECT count(*) FROM import_runs WHERE status='error'")->fetchColumn()===2,'Falhas de feed registradas por fonte');
+manage_check(count(rss_public_articles())===1,'Falha do feed preserva publicação com foto existente');
+$image=$public[0]['image_file']; unlink($dir.'/images/'.$image);
+manage_check(count(rss_public_articles())===0 && rss_status()['visible']===0,'Arquivo de foto removido oculta publicação');
+file_put_contents($dir.'/images/'.$image,'não é imagem');
+manage_check(count(rss_public_articles())===0,'Foto corrompida não publica');
+$db->prepare('UPDATE articles SET image_file=? WHERE title=?')->execute(['../../config.json','Sem foto']);
+manage_check(count(rss_public_articles())===0,'Chave de imagem inválida rejeitada');
+$db->exec('DELETE FROM sources WHERE id=1'); manage_check((int)$db->query('SELECT count(*) FROM import_runs WHERE source_id=1')->fetchColumn()===0,'Excluir fonte remove histórico associado');
+foreach(glob($dir.'/images/*') as $f) unlink($f); rmdir($dir.'/images'); $db=null;
+foreach(glob($dir.'/*') as $f) unlink($f); rmdir($dir);
+echo "$count verificações de gestão e publicação passaram.\n";

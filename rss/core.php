@@ -11,7 +11,7 @@ function rss_status() {
     $file=$db->query('PRAGMA database_list')->fetch(PDO::FETCH_ASSOC)['file'];
     return ['file'=>$file, 'sources'=>(int)$db->query('SELECT count(*) FROM sources')->fetchColumn(),
         'articles'=>(int)$db->query('SELECT count(*) FROM articles')->fetchColumn(),
-        'visible'=>(int)$db->query('SELECT count(*) FROM articles a JOIN sources s ON s.id=a.source_id WHERE s.active=1')->fetchColumn()];
+        'visible'=>count(rss_public_articles(null,null))];
 }
 function rss_db() {
     static $db;
@@ -24,6 +24,7 @@ function rss_db() {
     $db->exec('CREATE TABLE IF NOT EXISTS articles (id INTEGER PRIMARY KEY, source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE, identity TEXT NOT NULL, title TEXT NOT NULL, url TEXT NOT NULL, summary TEXT NOT NULL, image TEXT NOT NULL, published_at TEXT NOT NULL, UNIQUE(source_id, identity))');
     $columns=array_column($db->query('PRAGMA table_info(articles)')->fetchAll(PDO::FETCH_ASSOC),'name');
     foreach (['body','image_file','image_error'] as $column) if (!in_array($column,$columns,true)) $db->exec('ALTER TABLE articles ADD COLUMN '.$column." TEXT NOT NULL DEFAULT ''");
+    $db->exec('CREATE TABLE IF NOT EXISTS import_runs (id INTEGER PRIMARY KEY,source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,source_url TEXT NOT NULL,finished_at TEXT NOT NULL,status TEXT NOT NULL,processed INTEGER NOT NULL DEFAULT 0,created INTEGER NOT NULL DEFAULT 0,existing INTEGER NOT NULL DEFAULT 0,image_errors INTEGER NOT NULL DEFAULT 0,error TEXT)');
     return $db;
 }
 function rss_url($url) {
@@ -156,30 +157,64 @@ function rss_store($db,$source,$items) {
 function rss_refresh(?callable $fetcher=null,?callable $imageImporter=null) {
     $fetcher=$fetcher ?? 'rss_fetch';
     $db=rss_db(); $results=[];
-    foreach ($db->query('SELECT * FROM sources WHERE active=1') as $s) {
-        try { [$xml,$url]=$fetcher($s['url']); $items=rss_parse($xml,$url);
+    $sources=$db->query('SELECT * FROM sources WHERE active=1')->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($sources as $s) {
+        $processed=0; $created=0; $existing=0; $failed=0; $status='error';
+        try {
+            [$xml,$url]=$fetcher($s['url']); $items=array_values(array_column(rss_parse($xml,$url),null,'identity'));
+            $lookup=$db->prepare('SELECT 1 FROM articles WHERE source_id=? AND identity=?');
             foreach ($items as &$item) {
+                $lookup->execute([$s['id'],$item['identity']]);
+                if ($lookup->fetchColumn()) $existing++; else $created++;
                 if (!$item['image']) continue;
                 try { $item['image_file']=($imageImporter ?? 'rss_cache_image')($item['image']); }
-                catch (Throwable $e) { $item['image_error']=$e->getMessage(); }
+                catch (Throwable $e) { $item['image_error']=$e->getMessage(); $failed++; }
             }
             unset($item);
-            rss_store($db,$s['id'],$items); $error=null;
+            rss_store($db,$s['id'],$items); $error=null; $processed=count($items); $status=$failed ? 'partial' : 'success';
             $downloaded=count(array_filter($items,fn($item)=>!empty($item['image_file'])));
-            $failed=count(array_filter($items,fn($item)=>!empty($item['image_error'])));
-            $results[]=$s['name'].': '.count($items).' itens processados | imagens locais: '.$downloaded.' | falhas de imagem: '.$failed; }
-        catch (Throwable $e) { $error=$e->getMessage(); $results[]=$s['name'].': ERRO — '.$error; }
-        $db->prepare('UPDATE sources SET checked_at=?,error=? WHERE id=?')->execute([gmdate('Y-m-d H:i:s'),$error,$s['id']]);
+            $results[]=$s['name'].': '.$processed.' itens processados | novos: '.$created.' | existentes: '.$existing.' | imagens locais: '.$downloaded.' | falhas de imagem: '.$failed;
+        } catch (Throwable $e) { $error=$e->getMessage(); $created=0; $existing=0; $results[]=$s['name'].': ERRO — '.$error; }
+        $at=gmdate('Y-m-d H:i:s');
+        $db->prepare('UPDATE sources SET checked_at=?,error=? WHERE id=?')->execute([$at,$error,$s['id']]);
+        $db->prepare('INSERT INTO import_runs(source_id,source_url,finished_at,status,processed,created,existing,image_errors,error) VALUES(?,?,?,?,?,?,?,?,?)')->execute([$s['id'],$s['url'],$at,$status,$processed,$created,$existing,$failed,$error]);
     }
     return $results;
+}
+function rss_has_image($article) {
+    $key=$article['image_file'] ?? '';
+    if (!preg_match('/^[a-f0-9]{64}$/',$key)) return false;
+    $file=rss_data_dir().'/images/'.$key;
+    if (!is_file($file) || !is_readable($file) || filesize($file)>5*1024*1024) return false;
+    $info=@getimagesize($file);
+    return $info && in_array($info['mime'] ?? '',['image/jpeg','image/png','image/gif','image/webp'],true) && $info[0]*$info[1]<=40000000;
+}
+function rss_public_articles($category=null,$limit=54) {
+    $sql="SELECT a.*,s.name,s.category FROM articles a JOIN sources s ON s.id=a.source_id WHERE s.active=1 AND a.image_file<>''";
+    $params=[]; if ($category) { $sql.=' AND s.category=?'; $params[]=$category; }
+    $stmt=rss_db()->prepare($sql.' ORDER BY a.published_at DESC,a.id DESC'); $stmt->execute($params);
+    $rows=[];
+    foreach ($stmt as $article) {
+        if (!rss_has_image($article)) continue;
+        $rows[]=$article;
+        if ($limit!==null && count($rows)>=max(1,min(54,(int)$limit))) break;
+    }
+    return $rows;
+}
+function rss_save_source($id,$name,$url,$category) {
+    $name=trim($name); $url=rss_url($url);
+    if (!$name || strlen($name)>150 || !in_array($category,rss_categories(),true)) throw new InvalidArgumentException('Confira nome e categoria.');
+    $db=rss_db();
+    if ($id) {
+        $stmt=$db->prepare('SELECT id FROM sources WHERE id=?'); $stmt->execute([$id]);
+        if (!$stmt->fetchColumn()) throw new InvalidArgumentException('Fonte não encontrada.');
+        $db->prepare('UPDATE sources SET name=?,url=?,category=?,error=CASE WHEN url<>? THEN NULL ELSE error END,checked_at=CASE WHEN url<>? THEN NULL ELSE checked_at END WHERE id=?')->execute([$name,$url,$category,$url,$url,$id]);
+    } else $db->prepare('INSERT INTO sources(name,url,category) VALUES(?,?,?)')->execute([$name,$url,$category]);
 }
 function rss_cards($category=null,$limit=9) {
     $count=0;
     try {
-        $sql='SELECT a.*,s.name,s.category FROM articles a JOIN sources s ON s.id=a.source_id WHERE s.active=1';
-        $params=[]; if ($category) { $sql.=' AND s.category=?'; $params[]=$category; }
-        $stmt=rss_db()->prepare($sql.' ORDER BY a.published_at DESC,a.id DESC LIMIT '.max(1,min(54,(int)$limit))); $stmt->execute($params);
-        foreach ($stmt as $a) {
+        foreach (rss_public_articles($category,$limit) as $a) {
             $count++;
             echo '<article class="noticia-card">';
             if ($a['image']) echo '<img loading="lazy" src="'.rss_escape(rss_image_src($a)).'" alt="'.rss_escape($a['title']).'">';

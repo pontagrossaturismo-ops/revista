@@ -13,6 +13,8 @@ check($items[0]['url']==='https://example.com/noticia','Link relativo');
 check($items[0]['title']==='Turismo & lazer','Título e entidades');
 check(!str_contains($items[0]['summary'],'<script>'),'HTML removido');
 check($items[0]['image']==='https://example.com/foto.jpg','Imagem media');
+$png=base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jX1sAAAAASUVORK5CYII=');
+$items[0]['image_file']=rss_cache_image($items[0]['image'],fn($url,$limit)=>[$png,$url]);
 $atom='<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>atom1</id><title>Atom</title><link rel="self" href="https://example.com/feed"/><link rel="alternate" href="https://example.com/atom"/><summary>Teste</summary><updated>2026-01-01T00:00:00Z</updated></entry></feed>';
 $atoms=rss_parse($atom,'https://example.com/'); check(count($atoms)===1 && $atoms[0]['url']==='https://example.com/atom','Atom com namespace');
 rejects(fn()=>rss_parse('<!DOCTYPE rss [<!ENTITY x SYSTEM "file:///etc/passwd">]><rss/>','https://example.com/'),'XXE bloqueado');
@@ -39,5 +41,5 @@ check($db->query('SELECT error FROM sources WHERE id=1')->fetchColumn()===null,'
 check((bool)$db->query('SELECT error FROM sources WHERE id=2')->fetchColumn(),'Falha registrada separadamente');
 check((int)$db->query('SELECT count(*) FROM articles')->fetchColumn()===1,'Falha não remove notícias');
 $db->exec('DELETE FROM sources WHERE id=1'); check((int)$db->query('SELECT count(*) FROM articles')->fetchColumn()===0,'Excluir itens com fonte');
-$dir=getenv('RSS_DATA_DIR'); foreach(glob($dir.'/*') as $f) unlink($f); rmdir($dir);
+$dir=getenv('RSS_DATA_DIR'); foreach(glob($dir.'/images/*') as $f) unlink($f); rmdir($dir.'/images'); foreach(glob($dir.'/*') as $f) unlink($f); rmdir($dir);
 echo "$count verificações passaram.\n";

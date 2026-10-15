@@ -19,7 +19,7 @@
    - Uma fonte RSS/Atom inicial, opcional, com nome e categoria.
 5. Clique em **Validar e salvar configuração**. O instalador verifica extensões, conexão MySQL e tabela `materia`; para o guia opcional, verifica `lojas`. Não cria/altera tabelas MySQL. Uma falha de validação não salva os campos. Sem o MySQL, é possível desmarcar essa opção e usar apenas RSS; as páginas de matérias/guia originais ainda dependem dos respectivos bancos.
 6. A configuração é gerada automaticamente em `revista-config/config.json`, fora do site público, com permissão 0600. As senhas do banco ficam apenas nesse arquivo; a senha do painel é armazenada como hash. Inclua a pasta privada nos backups e use o mesmo usuário para PHP e cron. O código de ativação é consumido. Depois de instalado, `instalar.php` exige a senha atual do painel para reconfigurar.
-7. Abra **rss-admin.php** para cadastrar, editar nome/categoria (salvando novamente a mesma URL), pausar/ativar ou excluir fontes. Excluir remove também seus itens. Fontes pausadas são ocultadas.
+7. Abra **rss-admin.php** para cadastrar, editar nome, link e categoria pelo formulário de cada fonte, pausar/ativar ou excluir fontes. Excluir remove também seus itens. Fontes pausadas são ocultadas.
 
 O código usa `getenv('DB_HOST')` para ler o **nome de uma variável**, e não `getenv('nome-do-servidor')`. A tela elimina a necessidade de escrever esses valores no PHP. Variáveis de ambiente existentes têm prioridade sobre o arquivo: se já as utiliza, ajuste/remova os valores na hospedagem para que os campos da tela tenham efeito. Nunca salve senhas no GitHub. Troque as senhas antigas que estavam expostas nos arquivos enviados.
 
@@ -62,7 +62,7 @@ PHP_BIN=php python3 tests/http-test.py
 PHP_BIN=php python3 tests/setup-test.py
 ```
 
-Neste ambiente passaram 24 verificações RSS, 31 HTTP e 26 do instalador, além da sintaxe PHP. As verificações do instalador cobrem ativação, autenticação, campos, falha de conexão, persistência privada, consumo do código e intervalo de cron. O sucesso de uma conexão MySQL real não foi testado: o domínio informado não resolveu neste ambiente (erro 2002). Uma busca RSS externa também falhou em DNS. A conexão real, feeds e agendamento precisam ser confirmados na hospedagem. Imagens e edições originais não foram fornecidas para teste.
+Neste ambiente passaram 24 verificações RSS, 37 HTTP e 26 do instalador, além da sintaxe PHP. As verificações do instalador cobrem ativação, autenticação, campos, falha de conexão, persistência privada, consumo do código e intervalo de cron. O sucesso de uma conexão MySQL real não foi testado: o domínio informado não resolveu neste ambiente (erro 2002). Uma busca RSS externa também falhou em DNS. A conexão real, feeds e agendamento precisam ser confirmados na hospedagem. Imagens e edições originais não foram fornecidas para teste.
 
 ## Testar no XAMPP/Windows
 
@@ -113,6 +113,21 @@ Os cards abrem `rss-materia.php?id=...` na mesma aba, usando o layout atual. A p
 
 São reconhecidas imagens em media:content/media:thumbnail (inclusive grupos), enclosure e imagens no HTML de description/content:encoded, incluindo data-src/srcset. A imagem principal é baixada para `images` dentro do armazenamento RSS privado e servida por `rss-imagem.php`, sem expor a pasta. Imagens JPEG, PNG, GIF e WebP são aceitas, com limite de 5 MB e 40 milhões de pixels. Certificados e validação de destino continuam ativos. A primeira atualização pode demorar devido aos downloads.
 
-Falha ao baixar uma imagem não impede importar o texto; o endereço original é usado como alternativa quando não há cópia local. A fonte pode bloquear também essa exibição externa. Itens sem imagem fornecida pelo feed ficam sem foto. O terminal e o painel mostram falhas de imagens por fonte. O texto é exibido escapado, com parágrafos, sem executar HTML/scripts do feed. Inclua a pasta images nos backups; não há limpeza automática de imagens antigas.
+Falha ao baixar uma imagem não impede armazenar o texto, mas a matéria fica oculta do site até que uma foto válida seja baixada. Não há mais alternativa com imagem remota. Itens cujo feed não forneça imagem também ficam ocultos. O terminal e o painel mostram falhas de imagens por fonte. O texto é exibido escapado, com parágrafos, sem executar HTML/scripts do feed. Inclua a pasta images nos backups; não há limpeza automática de imagens antigas.
 
 Os testes adicionais `php tests/media-test.php` verificam migração de base antiga, conteúdo completo, extração/cache/validação de imagem, atualização sem duplicar e tolerância a erros de download. Os testes HTTP também verificam a leitura interna e a resposta PNG da imagem local.
+
+
+## Painel de gestão RSS e publicação somente com foto
+
+Acesse `rss-admin.php` com a senha existente. Atualize também `rss-admin.css` e os arquivos PHP do projeto. Não precisa reinstalar: a tabela de histórico é criada automaticamente no SQLite.
+
+- Cada fonte possui **Editar nome, link e categoria**. O formulário vem preenchido e permite alterar a URL sem excluir/recriar a fonte. Alterar a categoria move também suas notícias já importadas. A URL não pode coincidir com a de outra fonte. Os dados anteriores são preservados se o formulário falhar.
+- O painel informa notícias armazenadas, publicadas, sem foto local, tentativas de importação, execuções sem erros, falhas de feed e importações com falhas de imagem. Mostra também os erros recentes das imagens.
+- O histórico contém uma linha por fonte/tentativa, data UTC, URL utilizada, resultado, quantidade processada, itens novos, existentes reprocessados, erros de imagem e mensagem de falha do feed. O filtro seleciona uma fonte; a tabela mostra as 100 últimas linhas. Os totais abrangem todo o histórico mantido.
+- O histórico começa na atualização. Importações anteriores continuam armazenadas, mas não são contadas como execuções históricas inventadas. Reprocessar um item existente não aumenta o contador de novos.
+- Somente notícias RSS com arquivo de foto **local, legível e válido** aparecem nos cards, nas páginas internas e no feed XML de saída. Sem foto, download bloqueado, arquivo removido ou corrompido: a matéria fica oculta. Uma foto local válida já baixada pode continuar sendo usada se uma tentativa posterior de download da mesma URL falhar.
+- Itens ocultos permanecem armazenados e podem ser recuperados por nova execução do importador. Execute `rss-importar.php --force` no XAMPP para preencher fotos e iniciar o histórico desta versão. Não apague a configuração ou o banco.
+- Pausar oculta as notícias da fonte. Excluir remove a fonte, notícias e histórico associados; os arquivos de imagem privados não são limpos automaticamente.
+
+Os testes `php tests/management-test.php` cobrem edição, preservação de notícias/histórico, contagem de novos e existentes, erros de feed/imagem, fotos ausentes/corrompidas e exclusão. O teste HTTP cobre também edição autenticada, mudança de categoria e ocultação por link direto.

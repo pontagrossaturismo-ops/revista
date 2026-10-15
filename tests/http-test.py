@@ -42,6 +42,15 @@ with tempfile.TemporaryDirectory(prefix='revista-http-') as data:
             check('Notícias armazenadas: 1 | Visíveis: 1' in diag,'Diagnóstico confirma importação')
             storage_line=next(line for line in diag.splitlines() if line.startswith('Armazenamento RSS: '))
             check(storage_line.split(': ',1)[1] in page,'Apache e CLI usam o mesmo SQLite')
+            history_seed="require 'rss/core.php'; rss_db()->prepare('INSERT INTO import_runs(source_id,source_url,finished_at,status,error) VALUES(?,?,?,?,?)')->execute([1,'https://example.com/rss','2026-01-01 10:00:00','error','Feed HTTP 403']);"
+            subprocess.run([php,'-r',history_seed],cwd=root,env=env,check=True)
+            status,page=get('rss-admin.php?source=1')
+            check('Feed HTTP 403' in page and 'Link utilizado' in page and '<strong>1</strong><span>falhas de feed' in page,'Histórico e contadores de erro no painel')
+            status,page=get('rss-admin.php',{'csrf':csrf,'action':'save','id':'1','name':'Fonte editada','url':'https://example.com/new-feed','category':'lazer'})
+            check(status==200 and 'Fonte atualizada' in page and 'https://example.com/new-feed' in page,'Editar link e nome pelo painel')
+            check('Notícia &amp; teste' in get('lazer.php')[1] and 'Notícia &amp; teste' not in get('viagem.php')[1],'Edição de categoria move notícia')
+            status,page=get('rss-admin.php',{'csrf':csrf,'action':'save','id':'1','name':'Fonte Teste','url':'https://example.com/rss','category':'viagem'})
+            check('Fonte atualizada' in page and 'value="https://example.com/rss"' in page,'Campos editáveis preenchidos e fonte preservada')
             status,page=get('rss-admin.php',{'csrf':csrf,'action':'save','name':'Privado','url':'http://127.0.0.1/feed','category':'viagem'})
             check('Não foi possível salvar' in page,'Cadastro privado bloqueado')
             status,page=get('viagem.php'); check(status==200 and 'Notícia &amp; teste' in page and 'Fonte Teste' in page,'Categoria viagem')
@@ -62,6 +71,12 @@ with tempfile.TemporaryDirectory(prefix='revista-http-') as data:
             check(get('feed.php?categoria=invalida')[0]==400,'Categoria inválida')
             check(get('rss-importar.php')[0]==403,'Importação somente CLI')
             check(get('proxy.php?url=https://example.com')[0]==410,'Proxy aposentado')
+            hide="require 'rss/core.php'; rss_db()->exec(\"UPDATE articles SET image_file='' WHERE id=1\");"
+            subprocess.run([php,'-r',hide],cwd=root,env=env,check=True)
+            check('Notícia &amp; teste' not in get('noticias.php')[1] and 'Notícia &amp; teste' not in get('feed.php')[1],'Sem imagem local não aparece em listas ou XML')
+            check(get('rss-materia.php?id=1')[0]==404,'Sem imagem local não abre por link direto')
+            restore="require 'rss/core.php'; $key=hash('sha256','https://example.com/photo.png'); rss_db()->prepare('UPDATE articles SET image_file=? WHERE id=1')->execute([$key]);"
+            subprocess.run([php,'-r',restore],cwd=root,env=env,check=True)
             status,page=get('rss-admin.php',{'csrf':csrf,'action':'toggle','id':'1'})
             check('Pausada' in page,'Pausar fonte')
             check('Notícia &amp; teste' not in get('noticias.php')[1],'Ocultar pausadas')
