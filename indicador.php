@@ -1,183 +1,27 @@
 <?php
-
-
-
-// Conexão com o banco de dados
-require_once('log.php');
-
-// Verifica erros de conexão
-if ($mysqli->connect_error) {
-    die("Erro na conexão: " . $mysqli->connect_error);
-}
-
-// Prepara a consulta com um placeholder (?)
-$sql = "SELECT * FROM materia ORDER BY id desc";
-$stmt = $mysqli->prepare($sql);
-
-if (!$stmt) {
-    die("Erro na preparação da consulta: " . $mysqli->error);
-}
-
-
-
-// Executa a consulta
-if (!$stmt->execute()) {
-    error_log("Erro na execução da consulta: " . $stmt->error);
-    die("Ocorreu um erro, tente novamente mais tarde.");
-}
-
-// Obtém os resultados
-$result = $stmt->get_result();
-$noticia = $result->fetch_array();
-
-// Fecha a declaração e a conexão
-$stmt->close();
-$mysqli->close();
-
-// Verifica se encontrou a matéria
-if (!$noticia) {
-    die("Matéria não encontrada");
-}
-
-    $pageTitle = htmlspecialchars($noticia['titulo']) . " - Revista PG Turismo";
-    $pageDescription = substr(strip_tags($noticia['conteudo']), 0, 150) . "...";
- 
- 
-$texto = $noticia['descritivo'];
-
-// Função para limpar e limitar o resumo
-function gerarDescricaoResumida($texto, $limite = 160) {
-    $limpo = strip_tags($texto);
-    return substr($limpo, 0, $limite);
-}   
-
-// Dados para SEO
-$titulo = htmlspecialchars($noticia['titulo'], ENT_QUOTES, 'UTF-8');
-$descricao = htmlspecialchars($noticia['descritivo'], ENT_QUOTES, 'UTF-8');
-$palavrasChave = htmlspecialchars('notícia, conteúdo, revista, turismo', ENT_QUOTES, 'UTF-8');
-$url = "http://www.revistapgturismo.com.br/materia.php?id=".htmlspecialchars($noticia['id'], ENT_QUOTES, 'UTF-8');;
-$imagem = "https://www.revistapgturismo.com.br/" . htmlspecialchars($noticia['foto1'], ENT_QUOTES, 'UTF-8');
-
-
-include 'header.php';
+require_once __DIR__.'/guia/core.php';
+$slug=isset($_GET['id']) && is_string($_GET['id']) ? trim($_GET['id']) : '';
+$guide=$slug!=='' && strlen($slug)<=100 ? guia_lojas('url',$slug) : ['state'=>'ok','rows'=>[]];
+$store=$guide['rows'][0] ?? null;
+if ($guide['state']!=='ok') http_response_code(503); elseif (!$store) http_response_code(404);
+$titulo=rss_escape($store['nome'] ?? 'Guia de estabelecimentos');
+$pageDescription=rss_escape(substr(strip_tags($store['descritivo'] ?? 'Conheça os estabelecimentos de Ponta Grossa.'),0,180));
+$palavrasChave='estabelecimentos, Ponta Grossa'; $url=''; $imagem=rss_escape(guia_asset($store['perfil'] ?? '')); $noticia=['titulo'=>$store['nome'] ?? 'Guia de estabelecimentos','foto1'=>''];
+include __DIR__.'/header.php';
+guia_notice($guide['state']);
 ?>
-<br>
-
-
-
-
-<?php
-// Valida e sanitiza o parâmetro 'id' (tipo texto/slug)
-$tipo = null;
-if (isset($_GET['id'])) {
-    $tipo = filter_input(INPUT_GET, 'id', FILTER_SANITIZE_SPECIAL_CHARS);
-    $tipo = substr($tipo, 0, 100); // Limita o tamanho para evitar abusos
-}
-
-
-include('log-conv.php');
-
-// Verifica conexão
-if ($mysqli->connect_error) {
-    die("Erro na conexão: " . $mysqli->connect_error);
-}
-
-// CORRETO: Prepared statement com ?
-$stmt = $mysqli->prepare("SELECT * FROM lojas WHERE url = ?");
-if (!$stmt) {
-    die("Erro ao preparar consulta: " . $mysqli->error);
-}
-
-$stmt->bind_param("s", $tipo); // "s" = string
-$stmt->execute();
-
-// Pega o resultado com segurança
-$result = $stmt->get_result();
-if (!$result) {
-    die("Erro ao executar consulta: " . $stmt->error);
-}
-
-// Pega os dados
-$gastro = $result->fetch_assoc();
-?>
-
-
-<div class="capa" style="background-image: url(<?php echo $gastro['capa']; ?>)" align="center" >
-    
-      
-	
-	<img src="<?php echo $gastro['perfil']; ?>" style="border-radius: 100px; opacity: 0.8; margin: 7px; margin: auto" width="180px;">
-	
-
-
-</div>
-
-<div style="width: 90%; margin: auto">
-    
-    <h1 align="center" style="color: #222">
-        <?= htmlspecialchars($gastro['nome']) ?>
-    </h1>
-
-    <h3 style="color: #777; margin: 6px; font-size: 14px; font-family: Gotham, 'Helvetica Neue', Helvetica, Arial, sans-serif">
-        <?= htmlspecialchars($gastro['local']) ?><br>
-        <?= htmlspecialchars($gastro['telefone']) ?>
-    </h3>
-
-    <h2 align="justify" style="color: #222; font-size: 14px">
-        <?= nl2br(htmlspecialchars($gastro['descritivo'])) ?>
-    </h2>
-
-    <div id="img" style=" gap: 10px; margin-top: 20px;" align="center">
-       <?php
-// Exibe diretamente os caminhos das fotos
-for ($i = 1; $i <= 8; $i++) {
-    $foto = isset($gastro['foto' . $i]) ? $gastro['foto' . $i] : '';
-    if (!empty($foto)) {
-        
-        
-          ?>
-        
-         <div  style=" width: 200px; height: 200px; background: #fff; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); display: inline-block; align-content: center; text-align: center ; margin: 10px" align="center">
-     
-        <img src="<?php echo htmlspecialchars($foto) ; ?>" width="100%" height="100%" />
-             
-         </div>
-     
-    <?php
-    }
-}
-
-?>
-
-    </div>
-
-    <br>
-
-    <?php if (!empty($gastro['mapa'])): ?>
-        <iframe 
-            src="<?= htmlspecialchars($gastro['mapa']) ?>" 
-            width="100%" 
-            height="480" 
-            frameborder="0" 
-            style="margin-top: 20px;"
-            allowfullscreen
-        ></iframe>
-    <?php endif; ?>
-
-    <hr>
-</div>
-
-
-<?php
-
- // echo phpversion();
-
-// Libera recursos
-$stmt->close();
-$mysqli->close();
-?>
-
-
-
-<br>
-<?php include 'footer.php'; ?>
+<?php if($guide['state']==='ok' && !$store): ?><h1>Estabelecimento não encontrado</h1><p>Confira o endereço ou volte ao guia.</p><?php endif; ?>
+<?php if($store): ?>
+<article class="single-article">
+<?php $cover=guia_asset($store['capa'] ?? ''); $profile=guia_asset($store['perfil'] ?? ''); ?>
+<?php if($cover): ?><img src="<?=rss_escape($cover)?>" alt="<?=rss_escape($store['nome'] ?? '')?>" style="width:100%;max-height:350px;object-fit:cover"><?php endif; ?>
+<div class="article-content">
+<?php if($profile): ?><img src="<?=rss_escape($profile)?>" width="180" style="border-radius:100px" alt="<?=rss_escape($store['nome'] ?? '')?>"><?php endif; ?>
+<h1><?=rss_escape($store['nome'] ?? '')?></h1><p><?=rss_escape($store['local'] ?? '')?><br><?=rss_escape($store['telefone'] ?? '')?></p>
+<div class="conteudo"><?=nl2br(rss_escape($store['descritivo'] ?? ''))?></div>
+<div class="gallery-grid"><?php for($i=1;$i<=8;$i++): $photo=guia_asset($store['foto'.$i] ?? ''); if(!$photo) continue; ?><img src="<?=rss_escape($photo)?>" alt="Foto de <?=rss_escape($store['nome'] ?? 'estabelecimento')?>" loading="lazy" class="gallery-image"><?php endfor; ?></div>
+<?php $map=guia_asset($store['mapa'] ?? ''); if(preg_match('~^https?://~i',$map)): ?><iframe src="<?=rss_escape($map)?>" title="Localização do estabelecimento" width="100%" height="480" loading="lazy" referrerpolicy="no-referrer"></iframe><?php endif; ?>
+</div></article>
+<?php endif; ?>
+<p><a href="indicador-gastronomia.php">Voltar ao guia de gastronomia</a></p>
+<?php include __DIR__.'/footer.php'; ?>

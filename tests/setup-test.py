@@ -57,6 +57,7 @@ with tempfile.TemporaryDirectory(prefix='revista-setup-') as tmp:
             first=subprocess.run([php,'rss-importar.php','--force'],cwd=root,env=env_import,capture_output=True,text=True)
             second=subprocess.run([php,'rss-importar.php'],cwd=root,env=env_import,capture_output=True,text=True)
             check(first.returncode==0 and 'Aguardando intervalo' in second.stdout,'Cron respeita intervalo')
+            check('Iniciando importação RSS' in first.stdout and 'Nenhuma fonte ativa' in first.stdout and 'Finalizado.' in first.stdout,'Terminal informa início e conclusão mesmo sem fontes')
             client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
             status,page=request(); check('Senha do painel' in page and 'name="db_host"' not in page,'Configuração exige login após instalação')
             csrf=re.search('name="csrf" value="([^"]+)"',page)[1]

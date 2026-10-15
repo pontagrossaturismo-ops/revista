@@ -1,5 +1,5 @@
 """Executar: PHP_BIN=/caminho/php python3 tests/http-test.py"""
-import http.cookiejar, os, re, socket, subprocess, tempfile, time, urllib.request, urllib.parse, urllib.error
+import http.cookiejar, json, os, re, socket, subprocess, tempfile, time, urllib.request, urllib.parse, urllib.error
 from pathlib import Path
 php=os.environ.get('PHP_BIN','php')
 root=Path(__file__).resolve().parents[1]
@@ -32,6 +32,17 @@ with tempfile.TemporaryDirectory(prefix='revista-http-') as data:
                 except urllib.error.URLError: time.sleep(.1)
             check(status==200 and 'Senha' in page,'Login disponível')
             csrf=re.search('name="csrf" value="([^"]+)"',page)[1]
+            status,guide=get('indicador-gastronomia.php')
+            check(status==503 and 'Guia de Gastronomia' in guide and 'temporariamente indisponível' in guide and 'Fatal error' not in guide,'Guia sem banco configurado não exibe erro fatal')
+            status,guide=get('indicador.php?id=restaurante')
+            check(status==503 and 'temporariamente indisponível' in guide and 'Stack trace' not in guide,'Perfil sem banco configurado é tratado')
+            check(get('indicador.php')[0]==404,'Perfil sem identificador retorna 404')
+            config_dir=Path(env['REVISTA_CONFIG_DIR']); config_dir.mkdir(exist_ok=True)
+            config_file=config_dir/'config.json'
+            config_file.write_text(json.dumps({'DB_CONV_HOST':'127.0.0.1','DB_CONV_USER':'invalid','DB_CONV_NAME':'invalid','DB_CONV_PORT':1}))
+            status,guide=get('indicador-gastronomia.php')
+            check(status==503 and 'temporariamente indisponível' in guide and 'Fatal error' not in guide,'Falha de conexão do guia é tratada')
+            config_file.unlink()
             check(get('rss-admin.php',{'csrf':'invalid','password':'test-only-password'})[0]==403,'CSRF bloqueado')
             status,page=get('rss-admin.php',{'csrf':csrf,'password':'incorrect'})
             check('Senha inválida' in page and 'Fontes cadastradas' not in page,'Senha incorreta')

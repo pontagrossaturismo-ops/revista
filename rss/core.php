@@ -186,29 +186,36 @@ function rss_store($db,$source,$items) {
     $db->beginTransaction();
     try { foreach ($items as $i) $stmt->execute([$source,$i['identity'],$i['title'],$i['url'],$i['summary'],$i['image'],$i['published_at'],$i['body'] ?? $i['summary'],$i['image_file'] ?? '',$i['image_error'] ?? '']); $db->commit(); } catch (Throwable $e) { $db->rollBack(); throw $e; }
 }
-function rss_refresh(?callable $fetcher=null,?callable $imageImporter=null,?callable $pageFetcher=null) {
+function rss_refresh(?callable $fetcher=null,?callable $imageImporter=null,?callable $pageFetcher=null,?callable $progress=null) {
     $fetcher=$fetcher ?? 'rss_fetch';
     $db=rss_db(); $results=[];
     $sources=$db->query('SELECT * FROM sources WHERE active=1')->fetchAll(PDO::FETCH_ASSOC);
+    if (!$sources && $progress) $progress('Nenhuma fonte ativa cadastrada.');
     foreach ($sources as $s) {
+        if ($progress) $progress('Fonte '.$s['name'].': buscando RSS...');
         $processed=0; $created=0; $existing=0; $failed=0; $status='error';
         try {
             [$xml,$url]=$fetcher($s['url']); $items=array_values(array_column(rss_parse($xml,$url),null,'identity'));
             $lookup=$db->prepare('SELECT image,image_file FROM articles WHERE source_id=? AND identity=?');
+            $position=0;
             foreach ($items as &$item) {
+                $position++;
+                if ($progress) $progress($s['name'].' — item '.$position.'/'.count($items).': '.$item['title']);
                 $lookup->execute([$s['id'],$item['identity']]);
                 $old=$lookup->fetch(PDO::FETCH_ASSOC); if ($old) $existing++; else $created++;
                 try {
                     if (!$item['image'] && $old && rss_has_image($old)) {
-                        $item['image']=$old['image']; $item['image_file']=$old['image_file']; continue;
+                        $item['image']=$old['image']; $item['image_file']=$old['image_file']; if ($progress) $progress('Foto local reutilizada.'); continue;
                     }
                     if (!$item['image']) {
+                        if ($progress) $progress('Procurando foto na página original (timeout de até 15 segundos)...');
                         try { [$page,$pageUrl]=($pageFetcher ?? 'rss_fetch')($item['url']); $item['image']=rss_page_image($page,$pageUrl); }
                         catch(Throwable $e) { throw new RuntimeException('Busca da foto na página: '.$e->getMessage()); }
                     }
+                    if ($progress) $progress('Baixando/validando a foto...');
                     $item['image_file']=($imageImporter ?? 'rss_cache_image')($item['image']);
                 }
-                catch (Throwable $e) { $item['image_error']=$e->getMessage(); $failed++; }
+                catch (Throwable $e) { $item['image_error']=$e->getMessage(); $failed++; if ($progress) $progress('Item sem foto válida: '.$e->getMessage()); }
             }
             unset($item);
             rss_store($db,$s['id'],$items); $error=null; $processed=count($items); $status=$failed ? 'partial' : 'success';
@@ -218,6 +225,7 @@ function rss_refresh(?callable $fetcher=null,?callable $imageImporter=null,?call
         $at=gmdate('Y-m-d H:i:s');
         $db->prepare('UPDATE sources SET checked_at=?,error=? WHERE id=?')->execute([$at,$error,$s['id']]);
         $db->prepare('INSERT INTO import_runs(source_id,source_url,finished_at,status,processed,created,existing,image_errors,error) VALUES(?,?,?,?,?,?,?,?,?)')->execute([$s['id'],$s['url'],$at,$status,$processed,$created,$existing,$failed,$error]);
+        if ($progress) $progress($results[count($results)-1]);
     }
     return $results;
 }

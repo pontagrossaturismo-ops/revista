@@ -62,7 +62,7 @@ PHP_BIN=php python3 tests/http-test.py
 PHP_BIN=php python3 tests/setup-test.py
 ```
 
-Neste ambiente passaram 24 verificações RSS, 37 HTTP e 26 do instalador, além da sintaxe PHP. As verificações do instalador cobrem ativação, autenticação, campos, falha de conexão, persistência privada, consumo do código e intervalo de cron. O sucesso de uma conexão MySQL real não foi testado: o domínio informado não resolveu neste ambiente (erro 2002). Uma busca RSS externa também falhou em DNS. A conexão real, feeds e agendamento precisam ser confirmados na hospedagem. Imagens e edições originais não foram fornecidas para teste.
+Neste ambiente passaram 24 verificações RSS, 41 HTTP e 27 do instalador, além da sintaxe PHP. As verificações do instalador cobrem ativação, autenticação, campos, falha de conexão, persistência privada, consumo do código e intervalo de cron. O sucesso de uma conexão MySQL real não foi testado: o domínio informado não resolveu neste ambiente (erro 2002). Uma busca RSS externa também falhou em DNS. A conexão real, feeds e agendamento precisam ser confirmados na hospedagem. Imagens e edições originais não foram fornecidas para teste.
 
 ## Testar no XAMPP/Windows
 
@@ -140,3 +140,14 @@ Versões anteriores pulavam a busca quando o feed não continha um endereço de 
 Atualize `rss/core.php` e rode `rss-importar.php --force`. A consulta inicial pode demorar porque cada matéria sem foto exige uma requisição adicional (limite de 2 MB, timeout de 15 segundos por página), seguida do download da imagem. Nas próximas importações, uma foto local válida já associada ao mesmo item é reaproveitada. TLS, validação de DNS/IPs, limites de download e validação de imagens continuam ativos; não há contorno de bloqueios 403, login ou conteúdo restrito. O texto exibido continua sendo o fornecido pelo RSS.
 
 Os testes `php tests/image-discovery-test.php` usam documentos de exemplo para verificar Open Graph, Twitter, XHTML, entidades, reaproveitamento, cache inválido e diagnósticos de ausência/bloqueio. As fontes externas desta instalação não puderam ser consultadas neste ambiente devido à política de rede; a descoberta nas fontes reais deve ser confirmada após executar o importador no XAMPP.
+
+
+## Guia de gastronomia e terminal aparentemente parado
+
+`indicador-gastronomia.php` e `indicador.php` usam o banco do guia, configurado separadamente em `DB_CONV_*`, com a tabela `lojas`. Configurar somente o banco das matérias (`DB_*`, tabela `materia`) não configura automaticamente o guia.
+
+Se aparecer a mensagem de conexão ausente, abra `instalar.php`, entre com sua senha, marque **Configurar também o guia** e preencha os dados do banco que contém `lojas`. Salvar valida essa tabela antes de gravar. Não é necessário criar um banco novo se ela já existe em um banco seu. Se usar uma cópia local no XAMPP, importe a base que contém `lojas` pelo phpMyAdmin. Não presuma que ela esteja no mesmo banco das notícias.
+
+As páginas do guia agora tratam ausência/falha de conexão sem mostrar exceção ou stack trace ao visitante, e não consultam mais a tabela de notícias para montar o cabeçalho. A falta de configuração continua exigindo preencher os dados; uma mensagem tratada não significa que os estabelecimentos foram recuperados. As imagens/logos originais precisam existir nas pastas do site.
+
+O importador agora imprime início, fonte, posição do item, busca da foto, erros e resultado por fonte. Antes, ele só mostrava resultados depois de terminar todas as fontes; uma execução com muitas páginas sem foto podia ficar vários minutos sem saída. A ausência de um novo prompt no terminal indica que o processo ainda não devolveu o controle. Aguarde o progresso; se quiser substituir os arquivos durante uma execução antiga, interrompa essa execução com **Ctrl+C**, atualize o código e execute novamente. Não inicie processos adicionais em paralelo: o bloqueio impedirá importações concorrentes. Nas próximas execuções, imagens válidas já baixadas podem ser reaproveitadas.

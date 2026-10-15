@@ -31,7 +31,9 @@ rss_refresh(fn($u)=>[$feed,$u],$download,fn($u)=>['<html><body>Sem foto</body></
 $run=$db->query('SELECT * FROM import_runs ORDER BY id DESC')->fetch(PDO::FETCH_ASSOC);
 discovery_check($run['status']==='partial' && (int)$run['image_errors']===1 && rss_status()['visible']===0,'Foto ausente agora registra motivo e não publica');
 discovery_check(str_contains($db->query('SELECT image_error FROM articles')->fetchColumn(),'Nenhuma foto encontrada'),'Diagnóstico explica ausência da foto');
-rss_refresh(fn($u)=>[$feed,$u],$download,fn()=>throw new RuntimeException('HTTP 403'));
+$progress=[];
+rss_refresh(fn($u)=>[$feed,$u],$download,fn()=>throw new RuntimeException('HTTP 403'),function($message) use (&$progress) {$progress[]=$message;});
+discovery_check(str_contains($progress[0],'buscando RSS') && count(array_filter($progress,fn($m)=>str_contains($m,'item 1/1')))===1 && str_contains($progress[count($progress)-1],'itens processados'),'Progresso da fonte, item e resultado é emitido');
 discovery_check(str_contains($db->query('SELECT image_error FROM articles')->fetchColumn(),'Busca da foto na página: HTTP 403'),'Bloqueio da página registrado sem contornar restrição');
 foreach(glob($dir.'/images/*') as $f) unlink($f); rmdir($dir.'/images'); $db=null;
 foreach(glob($dir.'/*') as $f) unlink($f); rmdir($dir);
