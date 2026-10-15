@@ -1,0 +1,38 @@
+<?php
+$dir=sys_get_temp_dir().'/revista-discovery-'.bin2hex(random_bytes(6)); mkdir($dir,0700);
+putenv('RSS_DATA_DIR='.$dir); putenv('REVISTA_CONFIG_DIR='.$dir);
+require dirname(__DIR__).'/rss/core.php';
+$count=0;
+function discovery_check($ok,$message) { global $count; if (!$ok) throw new RuntimeException($message); $count++; }
+$base='https://example.com/noticias/materia';
+discovery_check(rss_page_image('<html><head><meta property="og:image" content="/principal.jpg"></head><body><img src="/logo.jpg"></body></html>',$base)==='https://example.com/principal.jpg','Priorizar imagem editorial Open Graph, não logo');
+discovery_check(rss_page_image('<meta name="twitter:image" content="https://cdn.example.com/photo.png">',$base)==='https://cdn.example.com/photo.png','Twitter image');
+discovery_check(rss_page_image('<link rel="image_src" href="/photo.jpg">',$base)==='https://example.com/photo.jpg','Link image_src');
+discovery_check(rss_page_image('<body><img src="/logo.png"><article><img data-lazy-src="/editorial.jpg"></article></body>',$base)==='https://example.com/editorial.jpg','Imagem dentro do artigo e lazy loading');
+$rejected=false; try { rss_page_image('<img src="/logo.png">',$base); } catch(Throwable $e) {$rejected=true;} discovery_check($rejected,'Não usar logotipo genérico como matéria');
+discovery_check(rss_html_image('&lt;img src=&quot;/encoded.png&quot;&gt;')==='/encoded.png','HTML com entidades adicionais');
+$xml='<rss><channel><item><title>Foto</title><link>https://example.com/noticia</link><image><url>https://example.com/custom.png</url></image></item></channel></rss>';
+discovery_check(rss_parse($xml,$base)[0]['image']==='https://example.com/custom.png','Campo RSS image/url');
+$atom='<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>a</id><title>XHTML</title><link href="https://example.com/noticia"/><content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>Texto completo</p><img src="/xhtml.jpg"/></div></content></entry></feed>';
+$item=rss_parse($atom,$base)[0]; discovery_check($item['image']==='https://example.com/xhtml.jpg' && str_contains($item['body'],'Texto completo'),'Atom XHTML');
+$png=base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jX1sAAAAASUVORK5CYII=');
+$db=rss_db(); rss_save_source(0,'Fonte sem foto no XML','https://example.com/feed','noticias');
+$feed='<rss><channel><item><guid>fixed</guid><title>Notícia</title><link>https://example.com/noticia</link><description>Resumo sem imagem</description></item></channel></rss>';
+$download=fn($url)=>rss_cache_image($url,fn($u,$limit)=>[$png,$u]);
+rss_refresh(fn($u)=>[$feed,$u],$download,fn($u)=>['<head><meta property="og:image" content="/picture.png"></head>',$u]);
+discovery_check(rss_status()['visible']===1 && $db->query('SELECT image FROM articles')->fetchColumn()==='https://example.com/picture.png','Feed sem imagem publica após baixar foto Open Graph');
+rss_refresh(fn($u)=>[$feed,$u],fn()=>throw new RuntimeException('Não deve baixar de novo'),fn()=>throw new RuntimeException('Não deve consultar página de novo'));
+discovery_check(rss_status()['visible']===1 && $db->query('SELECT image_error FROM articles')->fetchColumn()==='','Reutilizar foto válida quando RSS continua sem imagem');
+$key=hash('sha256','https://example.com/picture.png'); file_put_contents($dir.'/images/'.$key,'corrompido');
+rss_cache_image('https://example.com/picture.png',fn($u,$limit)=>[$png,$u]);
+discovery_check(rss_status()['visible']===1,'Recuperar cache corrompido com novo download');
+$db->exec('DELETE FROM articles');
+rss_refresh(fn($u)=>[$feed,$u],$download,fn($u)=>['<html><body>Sem foto</body></html>',$u]);
+$run=$db->query('SELECT * FROM import_runs ORDER BY id DESC')->fetch(PDO::FETCH_ASSOC);
+discovery_check($run['status']==='partial' && (int)$run['image_errors']===1 && rss_status()['visible']===0,'Foto ausente agora registra motivo e não publica');
+discovery_check(str_contains($db->query('SELECT image_error FROM articles')->fetchColumn(),'Nenhuma foto encontrada'),'Diagnóstico explica ausência da foto');
+rss_refresh(fn($u)=>[$feed,$u],$download,fn()=>throw new RuntimeException('HTTP 403'));
+discovery_check(str_contains($db->query('SELECT image_error FROM articles')->fetchColumn(),'Busca da foto na página: HTTP 403'),'Bloqueio da página registrado sem contornar restrição');
+foreach(glob($dir.'/images/*') as $f) unlink($f); rmdir($dir.'/images'); $db=null;
+foreach(glob($dir.'/*') as $f) unlink($f); rmdir($dir);
+echo "$count verificações de descoberta de imagens passaram.\n";

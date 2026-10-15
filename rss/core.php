@@ -83,14 +83,18 @@ function rss_parse($xml, $base) {
         if ($atom) foreach ($node->xpath('./*[local-name()="link"]') as $l) if (!isset($l['rel']) || (string)$l['rel']==='alternate') { $link=(string)$l['href']; break; }
         try { $link=rss_resolve($base,$link); } catch (Throwable $e) { continue; }
         if (!$title || !$link) continue;
-        $raw=(string)($get('description') ?: $get('summary'));
-        $full=(string)($get('encoded') ?: $get('content'));
+        $raw=rss_node_markup($get('description')); if ($raw==='') $raw=rss_node_markup($get('summary'));
+        $full=rss_node_markup($get('encoded')); if ($full==='') $full=rss_node_markup($get('content'));
         if (!$raw) $raw=$full;
         $image='';
         foreach ($node->xpath('.//*[local-name()="thumbnail" or local-name()="content" or local-name()="enclosure"]') as $m) {
             $type=(string)$m['type']; $medium=(string)$m['medium'];
             if (isset($m['url']) && (!$type || str_starts_with($type,'image/')) && (!$medium || $medium==='image')) { $image=(string)$m['url']; break; }
         }
+        if (!$image) foreach ($node->xpath('./*[local-name()="image" or local-name()="thumbnail"]') as $m) {
+            $urls=$m->xpath('./*[local-name()="url"]'); $image=trim((string)($m['url'] ?? '')) ?: trim((string)($urls[0] ?? $m)); if ($image) break;
+        }
+        if (!$image && $atom) foreach ($node->xpath('./*[local-name()="link"]') as $m) if ((string)$m['rel']==='enclosure' && str_starts_with((string)$m['type'],'image/')) { $image=(string)$m['href']; break; }
         if (!$image) $image=rss_html_image($full ?: $raw);
         if (!$image && $full) $image=rss_html_image($raw);
         try { $image=rss_resolve($link,$image); } catch (Throwable $e) { $image=''; }
@@ -100,9 +104,32 @@ function rss_parse($xml, $base) {
     }
     return $items;
 }
+function rss_node_markup($node) {
+    if (!$node instanceof SimpleXMLElement) return (string)$node;
+    $children=$node->xpath('./*');
+    if (!$children) return (string)$node;
+    return implode('',array_map(fn($child)=>$child->asXML(),$children));
+}
+function rss_page_image($html,$base) {
+    $doc=rss_html_document($html); $xpath=new DOMXPath($doc);
+    foreach (['og:image:secure_url','og:image','twitter:image','twitter:image:src'] as $key) {
+        foreach ($xpath->query('//meta[@property="'.$key.'" or @name="'.$key.'"]') as $meta) {
+            try { $url=rss_resolve($base,$meta->getAttribute('content')); if ($url) return $url; } catch(Throwable $e) { /* Tenta o próximo metadado. */ }
+        }
+    }
+    foreach ($xpath->query('//link[@rel="image_src"]') as $link) {
+        try { $url=rss_resolve($base,$link->getAttribute('href')); if ($url) return $url; } catch(Throwable $e) { }
+    }
+    // Não escolhe logos/banners genéricos da página como foto da matéria.
+    foreach ($xpath->query('//article') as $article) {
+        $candidate=rss_html_image($doc->saveHTML($article));
+        try { $url=rss_resolve($base,$candidate); if ($url) return $url; } catch(Throwable $e) { }
+    }
+    throw new RuntimeException('Nenhuma foto encontrada no feed ou nos metadados da matéria.');
+}
 function rss_html_document($html) {
     $doc=new DOMDocument(); $previous=libxml_use_internal_errors(true);
-    try { $doc->loadHTML('<?xml encoding="UTF-8"><html><body>'.$html.'</body></html>', LIBXML_NONET); }
+    try { $doc->loadHTML('<?xml encoding="UTF-8">'.$html, LIBXML_NONET); }
     finally { libxml_clear_errors(); libxml_use_internal_errors($previous); }
     foreach (['script','style','iframe','object','noscript'] as $tag) while ($node=$doc->getElementsByTagName($tag)->item(0)) $node->parentNode->removeChild($node);
     return $doc;
@@ -111,13 +138,15 @@ function rss_html_image($html) {
     if (!$html) return '';
     $doc=rss_html_document($html);
     foreach ($doc->getElementsByTagName('img') as $img) {
-        foreach (['data-src','src'] as $attribute) {
+        foreach (['data-src','data-lazy-src','data-original','src'] as $attribute) {
             $value=trim($img->getAttribute($attribute));
             if ($value && !str_starts_with($value,'data:')) return $value;
         }
         $srcset=$img->getAttribute('srcset');
         if ($srcset) return preg_split('/\s+/',trim(explode(',',$srcset)[0]))[0];
     }
+    $decoded=html_entity_decode($html,ENT_QUOTES | ENT_HTML5,'UTF-8');
+    if ($decoded!==$html) return rss_html_image($decoded);
     return '';
 }
 function rss_body_text($html) {
@@ -135,7 +164,10 @@ function rss_cache_image($url,?callable $fetcher=null) {
     $dir=rss_data_dir().'/images';
     if (!is_dir($dir) && !mkdir($dir,0700,true)) throw new RuntimeException('Sem permissão para salvar imagens.');
     $key=hash('sha256',$url); $file=$dir.'/'.$key;
-    if (is_file($file)) return $key;
+    if (is_file($file)) {
+        try { if (filesize($file)>5*1024*1024) throw new RuntimeException('Cache excede o limite.'); rss_image_info(file_get_contents($file)); return $key; }
+        catch (Throwable $e) { if (!unlink($file)) throw new RuntimeException('Não foi possível substituir imagem local inválida.'); }
+    }
     [$bytes]=($fetcher ?? 'rss_fetch')($url,5*1024*1024);
     if (strlen($bytes)>5*1024*1024) throw new RuntimeException('Imagem excede 5 MB.');
     rss_image_info($bytes);
@@ -154,7 +186,7 @@ function rss_store($db,$source,$items) {
     $db->beginTransaction();
     try { foreach ($items as $i) $stmt->execute([$source,$i['identity'],$i['title'],$i['url'],$i['summary'],$i['image'],$i['published_at'],$i['body'] ?? $i['summary'],$i['image_file'] ?? '',$i['image_error'] ?? '']); $db->commit(); } catch (Throwable $e) { $db->rollBack(); throw $e; }
 }
-function rss_refresh(?callable $fetcher=null,?callable $imageImporter=null) {
+function rss_refresh(?callable $fetcher=null,?callable $imageImporter=null,?callable $pageFetcher=null) {
     $fetcher=$fetcher ?? 'rss_fetch';
     $db=rss_db(); $results=[];
     $sources=$db->query('SELECT * FROM sources WHERE active=1')->fetchAll(PDO::FETCH_ASSOC);
@@ -162,12 +194,20 @@ function rss_refresh(?callable $fetcher=null,?callable $imageImporter=null) {
         $processed=0; $created=0; $existing=0; $failed=0; $status='error';
         try {
             [$xml,$url]=$fetcher($s['url']); $items=array_values(array_column(rss_parse($xml,$url),null,'identity'));
-            $lookup=$db->prepare('SELECT 1 FROM articles WHERE source_id=? AND identity=?');
+            $lookup=$db->prepare('SELECT image,image_file FROM articles WHERE source_id=? AND identity=?');
             foreach ($items as &$item) {
                 $lookup->execute([$s['id'],$item['identity']]);
-                if ($lookup->fetchColumn()) $existing++; else $created++;
-                if (!$item['image']) continue;
-                try { $item['image_file']=($imageImporter ?? 'rss_cache_image')($item['image']); }
+                $old=$lookup->fetch(PDO::FETCH_ASSOC); if ($old) $existing++; else $created++;
+                try {
+                    if (!$item['image'] && $old && rss_has_image($old)) {
+                        $item['image']=$old['image']; $item['image_file']=$old['image_file']; continue;
+                    }
+                    if (!$item['image']) {
+                        try { [$page,$pageUrl]=($pageFetcher ?? 'rss_fetch')($item['url']); $item['image']=rss_page_image($page,$pageUrl); }
+                        catch(Throwable $e) { throw new RuntimeException('Busca da foto na página: '.$e->getMessage()); }
+                    }
+                    $item['image_file']=($imageImporter ?? 'rss_cache_image')($item['image']);
+                }
                 catch (Throwable $e) { $item['image_error']=$e->getMessage(); $failed++; }
             }
             unset($item);

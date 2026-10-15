@@ -109,9 +109,9 @@ Execute novamente a importação para preencher o conteúdo e baixar as imagens 
 C:\xampp\php\php.exe C:\xampp\htdocs\PG-2025\novo\rss-importar.php --force
 ```
 
-Os cards abrem `rss-materia.php?id=...` na mesma aba, usando o layout atual. A página mostra título, fonte, data, imagem principal e texto do feed. Se a fonte publicar apenas resumo, o site mostrará apenas esse resumo, com link para consultar o original. Não há extração automática de páginas externas.
+Os cards abrem `rss-materia.php?id=...` na mesma aba, usando o layout atual. A página mostra título, fonte, data, imagem principal e texto do feed. Se a fonte publicar apenas resumo, o site mostrará apenas esse resumo, com link para consultar o original. Não há extração do texto integral das páginas externas; elas podem ser consultadas apenas para localizar a foto editorial.
 
-São reconhecidas imagens em media:content/media:thumbnail (inclusive grupos), enclosure e imagens no HTML de description/content:encoded, incluindo data-src/srcset. A imagem principal é baixada para `images` dentro do armazenamento RSS privado e servida por `rss-imagem.php`, sem expor a pasta. Imagens JPEG, PNG, GIF e WebP são aceitas, com limite de 5 MB e 40 milhões de pixels. Certificados e validação de destino continuam ativos. A primeira atualização pode demorar devido aos downloads.
+São reconhecidas imagens em media:content/media:thumbnail (inclusive grupos), enclosure, image/url, Atom XHTML e imagens no HTML de description/content:encoded, incluindo campos de carregamento tardio e HTML com entidades adicionais. Quando o feed não fornecer uma foto reconhecida, o importador consulta a página pública da matéria e procura og:image, twitter:image, image_src ou uma imagem dentro de article. Não seleciona um logo genérico fora do artigo. A imagem principal é baixada para `images` dentro do armazenamento RSS privado e servida por `rss-imagem.php`, sem expor a pasta. Imagens JPEG, PNG, GIF e WebP são aceitas, com limite de 5 MB e 40 milhões de pixels. Certificados e validação de destino continuam ativos. A primeira atualização pode demorar devido aos downloads.
 
 Falha ao baixar uma imagem não impede armazenar o texto, mas a matéria fica oculta do site até que uma foto válida seja baixada. Não há mais alternativa com imagem remota. Itens cujo feed não forneça imagem também ficam ocultos. O terminal e o painel mostram falhas de imagens por fonte. O texto é exibido escapado, com parágrafos, sem executar HTML/scripts do feed. Inclua a pasta images nos backups; não há limpeza automática de imagens antigas.
 
@@ -131,3 +131,12 @@ Acesse `rss-admin.php` com a senha existente. Atualize também `rss-admin.css` e
 - Pausar oculta as notícias da fonte. Excluir remove a fonte, notícias e histórico associados; os arquivos de imagem privados não são limpos automaticamente.
 
 Os testes `php tests/management-test.php` cobrem edição, preservação de notícias/histórico, contagem de novos e existentes, erros de feed/imagem, fotos ausentes/corrompidas e exclusão. O teste HTTP cobre também edição autenticada, mudança de categoria e ocultação por link direto.
+
+
+## Notícias armazenadas, nenhuma visível e zero erros de imagem
+
+Versões anteriores pulavam a busca quando o feed não continha um endereço de foto reconhecido. Isso podia resultar em importações com sucesso, muitos itens armazenados e nenhuma publicação com foto. A versão atual reconhece mais formatos e tenta a foto editorial na página original. Se não encontrar, ou se a página recusar acesso, registra uma falha de imagem com o motivo. A regra de publicar somente foto local válida continua obrigatória.
+
+Atualize `rss/core.php` e rode `rss-importar.php --force`. A consulta inicial pode demorar porque cada matéria sem foto exige uma requisição adicional (limite de 2 MB, timeout de 15 segundos por página), seguida do download da imagem. Nas próximas importações, uma foto local válida já associada ao mesmo item é reaproveitada. TLS, validação de DNS/IPs, limites de download e validação de imagens continuam ativos; não há contorno de bloqueios 403, login ou conteúdo restrito. O texto exibido continua sendo o fornecido pelo RSS.
+
+Os testes `php tests/image-discovery-test.php` usam documentos de exemplo para verificar Open Graph, Twitter, XHTML, entidades, reaproveitamento, cache inválido e diagnósticos de ausência/bloqueio. As fontes externas desta instalação não puderam ser consultadas neste ambiente devido à política de rede; a descoberta nas fontes reais deve ser confirmada após executar o importador no XAMPP.
