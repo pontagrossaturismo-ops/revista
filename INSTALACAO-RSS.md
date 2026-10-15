@@ -63,3 +63,24 @@ PHP_BIN=php python3 tests/setup-test.py
 ```
 
 Neste ambiente passaram 24 verificações RSS, 18 HTTP e 26 do instalador, além da sintaxe PHP. As verificações do instalador cobrem ativação, autenticação, campos, falha de conexão, persistência privada, consumo do código e intervalo de cron. O sucesso de uma conexão MySQL real não foi testado: o domínio informado não resolveu neste ambiente (erro 2002). Uma busca RSS externa também falhou em DNS. A conexão real, feeds e agendamento precisam ser confirmados na hospedagem. Imagens e edições originais não foram fornecidas para teste.
+
+## Testar no XAMPP/Windows
+
+Para arquivos em `C:\xampp\htdocs\PG-2025\novo`, use PHP 8.1+ do XAMPP, habilite as extensões citadas acima e inicie Apache. No Prompt de Comando (CMD):
+
+```bat
+cd /d C:\xampp\htdocs\PG-2025\novo
+C:\xampp\php\php.exe configurar-token.php
+```
+
+Copie o código exibido e abra `http://localhost/PG-2025/novo/instalar.php`. O instalador é PHP e não deve ser aberto diretamente como arquivo. No XAMPP, a configuração privada fica automaticamente em uma pasta `C:\xampp\revista-config-...`, fora de todo o `htdocs`. Atualize `config/runtime.php` para a versão com suporte a Windows antes de gerar o código. Mantenha a mesma pasta privada no terminal e no Apache.
+
+Para testar apenas RSS, desmarque a opção MySQL. Para testar matérias existentes com banco local, inicie MySQL e importe uma cópia do banco pelo phpMyAdmin; o instalador não cria a tabela `materia`. O banco remoto depende de permissão de acesso externo da hospedagem.
+
+Para importar no CMD:
+
+```bat
+C:\xampp\php\php.exe C:\xampp\htdocs\PG-2025\novo\rss-importar.php --force
+```
+
+Para atualização automática no Windows, use o Agendador de Tarefas: programa `C:\xampp\php\php.exe`, argumento `"C:\xampp\htdocs\PG-2025\novo\rss-importar.php"`, repetindo a cada minuto. O intervalo configurado continua sendo respeitado. Os caminhos Windows foram verificados por testes de normalização/isolamento no Linux; ainda é necessário confirmar a execução em um XAMPP real.

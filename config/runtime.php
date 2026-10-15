@@ -1,11 +1,29 @@
 <?php
+function revista_path_normalize($path) {
+    $path=rtrim(str_replace('\\','/',$path),'/');
+    return PHP_OS_FAMILY==='Windows' || preg_match('~^[a-z]:/~i',$path) || str_starts_with($path,'//') ? strtolower($path) : $path;
+}
+function revista_path_inside($path,$root) {
+    $path=revista_path_normalize($path); $root=revista_path_normalize($root);
+    return $path===$root || str_starts_with($path,$root.'/');
+}
+function revista_default_config_dir($project) {
+    $project=str_replace('\\','/',$project);
+    // No XAMPP, arquivos privados precisam ficar fora de todo o htdocs.
+    if (preg_match('~^(.*)/htdocs(?:/|$)~i',$project,$match)) return $match[1].'/revista-config-'.substr(hash('sha256',revista_path_normalize($project)),0,12);
+    return dirname($project).'/revista-config';
+}
 function revista_config_dir() {
-    $dir=getenv('REVISTA_CONFIG_DIR') ?: dirname(__DIR__,2).'/revista-config';
-    if (!str_starts_with($dir,'/') || is_link($dir)) throw new RuntimeException('Diretório de configuração inválido.');
+    $project=dirname(__DIR__);
+    $dir=getenv('REVISTA_CONFIG_DIR') ?: revista_default_config_dir($project);
+    if (!(str_starts_with($dir,'/') || preg_match('~^[a-z]:[\\\\/]~i',$dir) || str_starts_with($dir,'\\\\')) || is_link($dir)) throw new RuntimeException('Diretório de configuração inválido. Use um caminho absoluto.');
     $parent=realpath(is_dir($dir) ? $dir : dirname($dir));
-    $web=realpath(dirname(__DIR__));
-    if (!$parent || $parent===$web || str_starts_with($parent,$web.'/')) throw new RuntimeException('A configuração deve ficar fora da pasta pública.');
-    return rtrim($dir,'/');
+    $web=realpath($project);
+    $documentRoot=!empty($_SERVER['DOCUMENT_ROOT']) ? realpath($_SERVER['DOCUMENT_ROOT']) : false;
+    $normalized=str_replace('\\','/',$project);
+    if (!$documentRoot && preg_match('~^(.*?/htdocs)(?:/|$)~i',$normalized,$match)) $documentRoot=realpath($match[1]);
+    if (!$parent || revista_path_inside($parent,$web) || ($documentRoot && revista_path_inside($parent,$documentRoot))) throw new RuntimeException('A configuração deve ficar fora da pasta pública.');
+    return rtrim($dir,'/\\');
 }
 function revista_config() {
     $file=revista_config_dir().'/config.json';
