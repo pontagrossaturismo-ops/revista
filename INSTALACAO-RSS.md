@@ -44,7 +44,7 @@ Código de saída 1 indica falha de uma ou mais fontes. O erro e a última tenta
 
 ## Como as notícias aparecem
 
-Os cards e o CSS atuais são mantidos. A página inicial e categorias exibem primeiro as matérias locais e depois o bloco RSS, ordenado por data. As duas bases não têm ordenação conjunta. O RSS usa SQLite, sem modificar `materia`. O importador aceita RSS/Atom, evita duplicatas da mesma fonte, atualiza itens modificados e exibe resumo em texto com crédito e link original, sem extrair a íntegra das páginas de terceiros.
+Os cards e o CSS atuais são mantidos. A página inicial e categorias exibem primeiro o bloco identificado “Notícias das fontes RSS”, ordenado por data, e depois as matérias locais. As duas bases não têm ordenação conjunta. O RSS usa SQLite, sem modificar `materia`. O importador aceita RSS/Atom, evita duplicatas da mesma fonte, atualiza itens modificados e exibe resumo em texto com crédito e link original, sem extrair a íntegra das páginas de terceiros.
 
 `feed.php` exporta notícias importadas e aceita `?categoria=viagem` e demais categorias. As rotas antigas `g1_turismo_rss.php` e `g1_turismo_generate_rss.php` exportam a categoria viagem; para receber G1, cadastre sua URL RSS no painel. `example_display.php` e `display.php` usam o armazenamento local. O proxy de páginas foi desativado.
 
@@ -62,7 +62,7 @@ PHP_BIN=php python3 tests/http-test.py
 PHP_BIN=php python3 tests/setup-test.py
 ```
 
-Neste ambiente passaram 24 verificações RSS, 18 HTTP e 26 do instalador, além da sintaxe PHP. As verificações do instalador cobrem ativação, autenticação, campos, falha de conexão, persistência privada, consumo do código e intervalo de cron. O sucesso de uma conexão MySQL real não foi testado: o domínio informado não resolveu neste ambiente (erro 2002). Uma busca RSS externa também falhou em DNS. A conexão real, feeds e agendamento precisam ser confirmados na hospedagem. Imagens e edições originais não foram fornecidas para teste.
+Neste ambiente passaram 24 verificações RSS, 24 HTTP e 26 do instalador, além da sintaxe PHP. As verificações do instalador cobrem ativação, autenticação, campos, falha de conexão, persistência privada, consumo do código e intervalo de cron. O sucesso de uma conexão MySQL real não foi testado: o domínio informado não resolveu neste ambiente (erro 2002). Uma busca RSS externa também falhou em DNS. A conexão real, feeds e agendamento precisam ser confirmados na hospedagem. Imagens e edições originais não foram fornecidas para teste.
 
 ## Testar no XAMPP/Windows
 
@@ -84,3 +84,16 @@ C:\xampp\php\php.exe C:\xampp\htdocs\PG-2025\novo\rss-importar.php --force
 ```
 
 Para atualização automática no Windows, use o Agendador de Tarefas: programa `C:\xampp\php\php.exe`, argumento `"C:\xampp\htdocs\PG-2025\novo\rss-importar.php"`, repetindo a cada minuto. O intervalo configurado continua sendo respeitado. Os caminhos Windows foram verificados por testes de normalização/isolamento no Linux; ainda é necessário confirmar a execução em um XAMPP real.
+
+
+## Importou itens, mas não encontrou as notícias?
+
+Atualize todos os arquivos PHP do projeto, incluindo `index.php`, `noticias.php`, as páginas de categoria e as pastas `rss`/`config`. Atualizar apenas o importador não adiciona a exibição às páginas antigas. Preserve a configuração privada e o arquivo SQLite existente; não apague nem reinstale os dados para diagnosticar.
+
+Abra `noticias.php#noticias-rss`: o bloco “Notícias das fontes RSS” aparece antes das matérias locais. Em `rss-admin.php`, confira os totais armazenados/visíveis e os caminhos em “Diagnóstico do armazenamento”. Compare com a execução:
+
+```bat
+C:\xampp\php\php.exe C:\xampp\htdocs\PG-2025\novo\rss-importar.php --diagnostico
+```
+
+Os caminhos do SQLite precisam coincidir no terminal e no painel. Se forem diferentes, verifique variáveis `REVISTA_CONFIG_DIR` e `RSS_DATA_DIR`, versões dos arquivos e pasta acessada no navegador. Não compartilhe `config.json` nem suas senhas. `feed.php` permite verificar os itens exportados no navegador. Um erro 403 de uma fonte indica que aquele servidor recusou a requisição; ele não impede exibir itens importados de outras fontes.

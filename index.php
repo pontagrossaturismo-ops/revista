@@ -21,10 +21,11 @@ include 'header.php';
     </div>
 </section>
 
+<?php rss_section(null,9); ?>
 <section class="ultimas-noticias">
     <h2 class="section-title" >Últimas Notícias</h2>
     <div class="noticias-grid">
-<?php revista_manual_cards(revista_manual_news(null,9)); rss_cards(null,9); ?>
+<?php revista_manual_cards(revista_manual_news(null,9)); ?>
     </div>
     
     <!--

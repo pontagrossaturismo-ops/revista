@@ -3,10 +3,20 @@ require_once dirname(__DIR__).'/config/runtime.php';
 // PHP 8.1+, PDO SQLite, cURL, SimpleXML e mbstring não é necessário.
 function rss_escape($s) { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 function rss_categories() { return ['viagem','lazer','gastronomia','eventos','esporte','noticias']; }
+function rss_data_dir() {
+    return revista_setting('RSS_DATA_DIR') ?: dirname(__DIR__, 2).'/revista-rss-data';
+}
+function rss_status() {
+    $db=rss_db();
+    $file=$db->query('PRAGMA database_list')->fetch(PDO::FETCH_ASSOC)['file'];
+    return ['file'=>$file, 'sources'=>(int)$db->query('SELECT count(*) FROM sources')->fetchColumn(),
+        'articles'=>(int)$db->query('SELECT count(*) FROM articles')->fetchColumn(),
+        'visible'=>(int)$db->query('SELECT count(*) FROM articles a JOIN sources s ON s.id=a.source_id WHERE s.active=1')->fetchColumn()];
+}
 function rss_db() {
     static $db;
     if ($db) return $db;
-    $dir = revista_setting('RSS_DATA_DIR') ?: dirname(__DIR__, 2) . '/revista-rss-data';
+    $dir = rss_data_dir();
     if (!is_dir($dir) && !mkdir($dir, 0700, true)) throw new RuntimeException('Não foi possível criar o diretório RSS.');
     $db = new PDO('sqlite:' . $dir . '/rss.sqlite', null, null, [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
     $db->exec('PRAGMA busy_timeout=10000; PRAGMA foreign_keys=ON');
@@ -99,14 +109,26 @@ function rss_refresh(?callable $fetcher=null) {
     return $results;
 }
 function rss_cards($category=null,$limit=9) {
+    $count=0;
     try {
         $sql='SELECT a.*,s.name,s.category FROM articles a JOIN sources s ON s.id=a.source_id WHERE s.active=1';
         $params=[]; if ($category) { $sql.=' AND s.category=?'; $params[]=$category; }
         $stmt=rss_db()->prepare($sql.' ORDER BY a.published_at DESC,a.id DESC LIMIT '.max(1,min(54,(int)$limit))); $stmt->execute($params);
         foreach ($stmt as $a) {
+            $count++;
             echo '<article class="noticia-card">';
             if ($a['image']) echo '<img loading="lazy" src="'.rss_escape($a['image']).'" alt="'.rss_escape($a['title']).'">';
             echo '<div class="noticia-content"><span class="noticia-categoria">'.rss_escape($a['category']).'</span><h3><a href="'.rss_escape($a['url']).'" target="_blank" rel="noopener noreferrer">'.rss_escape($a['title']).'</a></h3><p class="noticia-resumo">'.rss_escape($a['summary']).'</p><div class="noticia-meta"><small>Fonte: '.rss_escape($a['name']).'</small><a class="ler-mais" href="'.rss_escape($a['url']).'" target="_blank" rel="noopener noreferrer">Ler na fonte</a></div></div></article>';
         }
-    } catch (Throwable $e) { error_log('RSS: '.$e->getMessage()); }
+    } catch (Throwable $e) { error_log('RSS: '.$e->getMessage()); return null; }
+    return $count;
 }
+function rss_section($category=null,$limit=9) {
+    echo '<section class="ultimas-noticias" id="noticias-rss"><h2 class="section-title">Notícias das fontes RSS</h2><div class="noticias-grid">';
+    $count=rss_cards($category,$limit);
+    echo '</div>';
+    if ($count===0) echo '<p>Nenhuma notícia RSS disponível nesta categoria no momento.</p>';
+    if ($count===null) echo '<p>Não foi possível carregar as notícias RSS. Consulte o diagnóstico no painel de fontes.</p>';
+    echo '</section>';
+}
+
