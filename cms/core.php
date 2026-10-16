@@ -267,3 +267,32 @@ function cms_render_card($entry) {
     if($entry['image']) echo '<a class="news-photo" href="'.rss_escape($entry['href']).'"><img loading="lazy" src="'.rss_escape($entry['image']).'" alt="'.rss_escape($entry['title']).'"></a>';
     echo '<div class="noticia-content"><h3><a href="'.rss_escape($entry['href']).'">'.rss_escape($entry['title']).'</a></h3></div></article>';
 }
+
+function cms_spotlight_items($entries) {
+    $featured=null; $groups=[];
+    foreach($entries as $entry) {
+        if(empty($entry['image'])) continue;
+        if($entry['category']==='viagem') { if($featured===null) $featured=$entry; continue; }
+        $groups[$entry['category']][]=$entry;
+    }
+    $secondary=[];
+    while($groups && count($secondary)<5) {
+        foreach($groups as $category=>&$items) {
+            $secondary[]=array_shift($items);
+            if(!$items) unset($groups[$category]);
+            if(count($secondary)===5) break;
+        }
+        unset($items);
+    }
+    return ['featured'=>$featured,'secondary'=>$secondary];
+}
+function cms_render_spotlight($entries) {
+    $selection=cms_spotlight_items($entries); $featured=$selection['featured']; if(!$featured) return;
+    $secondary=$selection['secondary']; $colors=[];
+    foreach(cms_db()->query('SELECT category,color FROM cms_sections ORDER BY position,id') as $section) if(!isset($colors[$section['category']])) $colors[$section['category']]=$section['color'];
+    $color=static function($category) use ($colors) { $value=$colors[$category] ?? '#ad1431'; return preg_match('/^#[a-f0-9]{6}$/i',$value)?$value:'#ad1431'; };
+    ?><section class="home-spotlight <?=$secondary?'':'spotlight-solo'?>" aria-label="Destaques de Viagem e outras categorias">
+    <article class="spotlight-main"><a href="<?=rss_escape($featured['href'])?>"><img src="<?=rss_escape($featured['image'])?>" alt="<?=rss_escape($featured['title'])?>" fetchpriority="high" decoding="async"><div class="spotlight-caption"><span class="spotlight-tag" style="--tag-color:<?=rss_escape($color('viagem'))?>">Viagem</span><h2><?=rss_escape($featured['title'])?></h2></div></a></article>
+    <?php if($secondary): ?><div class="spotlight-side" style="--spotlight-count:<?=count($secondary)?>"><?php foreach($secondary as $entry): ?><article class="spotlight-small"><a href="<?=rss_escape($entry['href'])?>"><img src="<?=rss_escape($entry['image'])?>" alt="<?=rss_escape($entry['title'])?>" loading="lazy" decoding="async"><div><span class="spotlight-tag" style="--tag-color:<?=rss_escape($color($entry['category']))?>"><?=rss_escape(cms_category_label($entry['category']))?></span><h3><?=rss_escape($entry['title'])?></h3></div></a></article><?php endforeach; ?></div><?php endif; ?>
+    </section><?php
+}

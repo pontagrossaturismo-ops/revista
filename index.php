@@ -22,7 +22,7 @@ include 'header.php';
     </div>
 </section>
 
-<?php $allNews=cms_news_entries(); foreach(cms_db()->query('SELECT * FROM cms_sections WHERE active=1 ORDER BY position,id') as $section):
+<?php $allNews=cms_news_entries(); cms_render_spotlight($allNews); foreach(cms_db()->query('SELECT * FROM cms_sections WHERE active=1 ORDER BY position,id') as $section):
 $items=array_slice(array_values(array_filter($allNews,fn($entry)=>$entry['category']===$section['category'])),0,4); ?>
 <section class="home-section" style="--section-color:<?=rss_escape($section['color'])?>" data-section="<?=rss_escape($section['category'])?>">
 <div class="home-section-heading"><h2 class="section-title"><?=rss_escape($section['title'])?></h2><a href="categoria.php?categoria=<?=rawurlencode($section['category'])?>">Ver mais</a></div>

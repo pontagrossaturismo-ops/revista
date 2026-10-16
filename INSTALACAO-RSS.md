@@ -305,3 +305,12 @@ As matérias da OFEC usam a data original `published_at` em ordem decrescente na
 Fontes RSS agora abre em `admin.php?area=rss`, com a mesma barra lateral, item selecionado, estilos e botão de atualização dos demais menus. `rss-admin.php` permanece disponível com o mesmo layout e sessão. Cadastro, edição, pausa, exclusão e filtro de histórico continuam disponíveis; o filtro preserva a área RSS. O arquivo compartilhado `cms/admin-layout.php` é necessário para as duas telas.
 
 Para aplicar, atualize as pastas `rss` e `cms`, além de `admin.php` e `rss-admin.php`, e recarregue com Ctrl+F5. A ordenação já utiliza as datas armazenadas; uma atualização manual consulta novamente a OFEC e pode corrigir datas antigas recebidas da API. Não precisa reinstalar. Testes: `php tests/ofec-order-test.php` e `PHP_BIN=php python3 tests/layout-browser-test.py`, incluindo o menu RSS, cadastro e filtro dentro do painel, além do layout no celular.
+
+
+### Bloco de destaque de Viagem na inicial
+
+Logo abaixo de **Última Edição**, o bloco editorial mostra uma matéria de Viagem em foto grande, com título sobre a imagem, e até cinco chamadas menores ao lado. As chamadas laterais intercalam as outras categorias, priorizando a ordem atual das notícias, sem sorteio aleatório e sem repetir uma chamada dentro do bloco. Fotos e títulos abrem a matéria no próprio site; não são exibidas descrições. As etiquetas usam as cores configuradas nas seções.
+
+A seleção mistura as mesmas origens já disponíveis no site: MySQL, notícias locais e RSS com imagem válida. O destaque é a primeira notícia de Viagem na ordenação existente. Sem Viagem com foto, o bloco não aparece; se só houver Viagem, a chamada grande ocupa a largura disponível. Em telas pequenas, as chamadas menores ficam abaixo da principal. As seções regulares e seus banners permanecem após o novo bloco.
+
+Atualize `index.php`, `cms/core.php` e `cms/site.css` e recarregue com Ctrl+F5. Não precisa alterar o banco ou cadastrar novamente os feeds. Testes: `php tests/spotlight-test.php` e `PHP_BIN=php python3 tests/layout-browser-test.py` cobrem seleção variada, limites, ausência de imagens, links, layout lado a lado e comportamento no celular.

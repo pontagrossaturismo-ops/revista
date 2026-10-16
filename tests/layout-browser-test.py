@@ -11,6 +11,7 @@ with tempfile.TemporaryDirectory(prefix='revista-layout-') as tmp:
     cms_save_news(0,0,['title'=>'Matéria local','category'=>'viagem','image'=>'https://example.com/photo.png','body'=>'Texto da matéria.','credit'=>'Foto Local']);
     cms_save_news(0,0,['title'=>'Relacionada local','category'=>'viagem','image'=>'https://example.com/photo2.png','body'=>'Outro texto.']);
     cms_save_news(0,0,['title'=>'Não relacionada','category'=>'lazer','image'=>'https://example.com/photo3.png','body'=>'Texto.']);
+    foreach(['esporte','eventos','gastronomia','ponta-grossa'] as $category) cms_save_news(0,0,['title'=>'Chamada '.$category,'category'=>$category,'image'=>'https://example.com/photo.png','body'=>'Texto de teste.']);
     cms_save_company(0,'',['nome'=>'Empresa layout','url'=>'empresa-layout','categoria'=>'gastronomia','local'=>'Rua Teste, 123','telefone'=>'42 3000-0000','whatsapp'=>'42 99999-1234']);
     rss_save_source(0,'Crédito RSS','https://example.com/feed','viagem');
     $png=base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jX1sAAAAASUVORK5CYII=');
@@ -122,9 +123,21 @@ with tempfile.TemporaryDirectory(prefix='revista-layout-') as tmp:
                     if path.startswith('rss'):
                         check(bool(re.fullmatch(r'\d{2}/\d{2}/\d{4}',page.locator('time').inner_text())) and 'Fonte:' not in page.locator('article.single-article').inner_text(),'RSS sem hora e sem rótulo Fonte')
                 page.goto(base+'index.php'); banner=page.locator('.ad-slot'); image=banner.locator('img')
+                spotlight=page.locator('.home-spotlight'); hero=page.locator('.spotlight-main'); side=page.locator('.spotlight-side')
+                check(spotlight.count()==1 and hero.locator('.spotlight-tag').text_content().strip()=='Viagem','Destaque grande da categoria Viagem')
+                check(page.locator('.spotlight-small').count()==5 and len(set(page.locator('.spotlight-small .spotlight-tag').all_inner_texts()))==5,'Cinco chamadas de categorias variadas')
+                check(hero.bounding_box()['x']<side.bounding_box()['x'] and hero.bounding_box()['width']>side.bounding_box()['width'],'Destaque à esquerda maior que a lista lateral')
+                check(hero.locator('a').get_attribute('href') and all(page.locator('.spotlight-small a').nth(i).get_attribute('href') for i in range(5)),'Fotos e títulos abrem as matérias')
+                check(not spotlight.locator('.noticia-resumo').count(),'Chamadas sem descrições')
+                page.screenshot(path='/tmp/revista-home-spotlight.png',full_page=False)
+
                 bounds=banner.bounding_box(); img=image.bounding_box()
                 check(abs((bounds['x']+bounds['width']/2)-(img['x']+img['width']/2))<=2,'Publicidade centralizada na home')
-                page.set_viewport_size({'width':390,'height':900}); page.goto(base+'rss-materia.php?id=1')
+                page.set_viewport_size({'width':390,'height':900}); page.goto(base+'index.php')
+                check(page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+1'),'Destaque sem rolagem horizontal no celular')
+                hero=page.locator('.spotlight-main').bounding_box(); side=page.locator('.spotlight-side').bounding_box()
+                check(hero['y']+hero['height']<=side['y'],'Chamadas menores abaixo do destaque no celular')
+                page.goto(base+'rss-materia.php?id=1')
                 check(page.evaluate('document.documentElement.scrollWidth<=window.innerWidth'),'Matéria responsiva sem rolagem horizontal')
                 bounds=page.locator('.ad-slot').bounding_box(); img=page.locator('.ad-slot img').bounding_box()
                 check(abs(bounds['x']+bounds['width']/2-img['x']-img['width']/2)<=2,'Publicidade centralizada também no celular')
