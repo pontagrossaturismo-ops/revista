@@ -1,6 +1,6 @@
 <?php
 function cms_admin_sidebar($active) {
-    $menus=['dashboard'=>'Dashboard','sections'=>'Seções','banners'=>'Banners','news'=>'Notícias manuais','companies'=>'Empresas','rss'=>'Fontes RSS','settings'=>'Configurações'];
+    $menus=['dashboard'=>'Dashboard','sections'=>'Seções','banners'=>'Banners','news'=>'Notícias manuais','companies'=>'Empresas','events'=>'Agenda','routes'=>'Roteiros','rss'=>'Fontes RSS','settings'=>'Configurações'];
     ?><aside class="admin-sidebar"><div class="admin-brand">Revista PG<small>PAINEL ADMINISTRATIVO</small></div><nav class="admin-nav" aria-label="Menu administrativo"><?php foreach($menus as $key=>$label): ?><a class="<?=$active===$key?'active':''?>" <?=$active===$key?'aria-current="page"':''?> href="admin.php?area=<?=$key?>"><?=rss_escape($label)?></a><?php endforeach; ?></nav><div class="sidebar-bottom"><a href="index.php">↗ Abrir o site</a></div></aside><?php
 }
 function cms_admin_refresh() {

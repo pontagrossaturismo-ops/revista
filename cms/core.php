@@ -184,7 +184,7 @@ function cms_whatsapp($value) {
 }
 function cms_save_company($id,$legacy,$values) {
     $db=cms_db(); $data=[];
-    foreach(['nome','categoria','local','telefone','whatsapp','descritivo','perfil','capa','mapa','foto1','foto2','foto3','foto4','foto5','foto6','foto7','foto8'] as $field) $data[$field]=trim((string)($values[$field] ?? ''));
+    foreach(['nome','categoria','local','bairro','horarios','faixa_preco','acessibilidade','familias','telefone','whatsapp','descritivo','perfil','capa','mapa','foto1','foto2','foto3','foto4','foto5','foto6','foto7','foto8'] as $field) $data[$field]=trim((string)($values[$field] ?? ''));
     $slug=cms_category($values['url'] ?? $data['nome']); $data['categoria']=cms_category($data['categoria']);
     if(!$data['nome'] || !$slug || strlen($slug)>100 || !in_array($data['categoria'],['gastronomia','compras','hospedagem'],true)) throw new InvalidArgumentException('Preencha nome, categoria e endereço curto com até 100 caracteres.');
     cms_whatsapp($data['whatsapp']);

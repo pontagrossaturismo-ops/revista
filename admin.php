@@ -1,4 +1,5 @@
 <?php
+if(in_array($_GET['area'] ?? '',['events','routes'],true)) { require __DIR__.'/cms/tourism-admin.php'; return; }
 if(($_GET['area'] ?? '')==='rss') { require __DIR__.'/rss-admin.php'; return; }
 require_once __DIR__.'/cms/metrics.php';
 require_once __DIR__.'/cms/admin-layout.php';
@@ -98,7 +99,7 @@ admin_input('title','Título',$record['title'] ?? '','text',true); admin_input('
 <?php else:
 admin_input('nome','Nome da empresa',$record['nome'] ?? '','text',true); admin_input('url','Endereço curto (ex.: restaurante-central)',$record['url'] ?? '','text',true); ?>
 <label>Categoria<select name="categoria"><?php foreach(['gastronomia','compras','hospedagem'] as $category): ?><option <?=($record['categoria'] ?? '')===$category?'selected':''?>><?=$category?></option><?php endforeach; ?></select></label>
-<?php admin_input('local','Endereço',$record['local'] ?? ''); admin_input('telefone','Telefone',$record['telefone'] ?? ''); admin_input('whatsapp','WhatsApp com DDD (opcional)',$record['whatsapp'] ?? ''); ?>
+<?php admin_input('local','Endereço',$record['local'] ?? ''); admin_input('bairro','Bairro',$record['bairro'] ?? ''); admin_input('horarios','Horários de funcionamento (texto)',$record['horarios'] ?? ''); admin_input('faixa_preco','Faixa de preço (ex.: econômico, médio, alto)',$record['faixa_preco'] ?? ''); admin_input('acessibilidade','Informações de acessibilidade',$record['acessibilidade'] ?? ''); admin_input('familias','Atendimento a famílias (opcional)',$record['familias'] ?? ''); admin_input('telefone','Telefone',$record['telefone'] ?? ''); admin_input('whatsapp','WhatsApp com DDD (opcional)',$record['whatsapp'] ?? ''); ?>
 <label>Descrição<textarea name="descritivo" rows="8"><?=rss_escape($record['descritivo'] ?? '')?></textarea></label>
 <?php admin_image('perfil','Logotipo',$record['perfil'] ?? ''); admin_image('capa','Foto de capa',$record['capa'] ?? ''); admin_input('mapa','URL do mapa (opcional)',$record['mapa'] ?? ''); ?>
 <details><summary>Galeria de fotos (opcional)</summary><?php for($i=1;$i<=8;$i++) admin_image('foto'.$i,'Foto '.$i,$record['foto'.$i] ?? ''); ?></details>

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/cms/core.php';
+require_once __DIR__.'/cms/engagement.php';
 $id=filter_input(INPUT_GET,'id',FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
 try {
     $stmt=rss_db()->prepare('SELECT a.*,s.name,s.category FROM articles a JOIN sources s ON s.id=a.source_id WHERE a.id=? AND s.active=1');
@@ -8,8 +9,8 @@ try {
 if (!$article || !rss_has_image($article)) { http_response_code(404); exit('Notícia não encontrada.'); }
 $titulo=rss_escape($article['title']); $pageDescription=rss_escape(substr($article['summary'],0,180));
 $palavrasChave=rss_escape($article['category'].', turismo, notícias');
-$url=rss_escape(rtrim(revista_setting('SITE_URL',''),'/').'/rss-materia.php?id='.(int)$article['id']);
-$imagem=rss_escape($article['image']); $noticia=['titulo'=>$article['title'],'foto1'=>$article['image']];
+$url=cms_public_url('rss-materia.php?id='.(int)$article['id']);
+$imagem=cms_public_url('rss-imagem.php?id='.(int)$article['id']); $noticia=['titulo'=>$article['title'],'foto1'=>$article['image']];
 $pageStyles=['cms/site.css'];
 include __DIR__.'/header.php';
 ?>
@@ -24,5 +25,6 @@ include __DIR__.'/header.php';
 <p><a class="ler-mais" href="<?=rss_escape($article['url'])?>" target="_blank" rel="noopener noreferrer">Consultar publicação original</a></p>
 <p><a href="noticias.php#noticias-rss">Voltar às notícias</a></p></div>
 </article>
+<?php cms_share($article['title'],'rss-materia.php?id='.(int)$article['id']); ?>
 <?php cms_render_related($article['category'],'rss:'.$article['id']); ?></div>
 <?php include __DIR__.'/footer.php'; ?>

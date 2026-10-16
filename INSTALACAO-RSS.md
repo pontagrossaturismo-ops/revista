@@ -314,3 +314,31 @@ Logo abaixo de **Última Edição**, o bloco editorial mostra uma matéria de Vi
 A seleção mistura as mesmas origens já disponíveis no site: MySQL, notícias locais e RSS com imagem válida. O destaque é a primeira notícia de Viagem na ordenação existente. Sem Viagem com foto, o bloco não aparece; se só houver Viagem, a chamada grande ocupa a largura disponível. Em telas pequenas, as chamadas menores ficam abaixo da principal. As seções regulares e seus banners permanecem após o novo bloco.
 
 Atualize `index.php`, `cms/core.php` e `cms/site.css` e recarregue com Ctrl+F5. Não precisa alterar o banco ou cadastrar novamente os feeds. Testes: `php tests/spotlight-test.php` e `PHP_BIN=php python3 tests/layout-browser-test.py` cobrem seleção variada, limites, ausência de imagens, links, layout lado a lado e comportamento no celular.
+
+### Planejamento da visita: agenda, roteiros, busca e guia
+
+A inicial agora começa pelos destaques, antes de **Última Edição**, e inclui acessos para planejar a visita, quatro roteiros, programação da agenda e os guias de empresas. Quando os arquivos originais de logo/edição não existem, há uma marca alternativa e um aviso editorial, sem um quadro cinza vazio. As fotos têm proporções consistentes, carregamento adiado quando adequado e uma ilustração alternativa em caso de falha; banners mantêm espaço reservado e centralização. As ilustrações de roteiros são artes editoriais, não fotografias dos locais. A navegação oferece Explore, Agenda, Gastronomia, Onde ficar, Revista e a busca.
+
+**Roteiros:** `roteiros.php` e `roteiro.php?slug=...`. São criados uma única vez quatro textos originais: um dia em Ponta Grossa, passeios gratuitos, com crianças e em dias de chuva. Os textos são sugestões e orientam a confirmar acesso, reservas, funcionamento e condições dos locais; não inventam preços ou horários de visitação. Em **Admin → Roteiros**, é possível editar, criar, ocultar e excluir, além de enviar outra imagem. Excluir um roteiro não faz a semente reaparecer. No conteúdo, uma linha de título seguida do texto do bloco vira um subtítulo; separe os blocos com uma linha vazia.
+
+**Agenda:** `agenda.php` e `evento.php?id=...`. Em **Admin → Agenda**, cadastre título, categoria, início/término no horário de Brasília, local, preço informado, imagem, descrição e link oficial/ingressos. Os formulários abrem em Adicionar ou Editar. Eventos encerrados saem automaticamente da agenda e da busca, mas o cadastro permanece no admin e o link público mostra um aviso de encerramento. Há filtros por data/categoria e um atalho de fim de semana. A agenda começa sem eventos fictícios: depende de cadastros do proprietário. Notícias da categoria Eventos continuam sendo notícias; não são transformadas em compromissos com datas presumidas.
+
+**Busca:** `busca.php?q=...` pesquisa notícias publicadas, empresas visíveis, eventos vigentes e roteiros publicados, com seleção de tipo e paginação de 15 resultados. A pesquisa desconsidera maiúsculas e os acentos portugueses tratados pelo site. Notícias continuam respeitando a regra de imagem válida para RSS; rascunhos e exclusões não entram nos resultados.
+
+**Empresas:** o formulário passa a incluir bairro, horários em texto, faixa de preço, acessibilidade e atendimento a famílias. O guia filtra categoria, palavra-chave, bairro e faixa de preço. Preencha esses campos nas empresas existentes para oferecer opções úteis de filtro. O perfil mostra apenas informações cadastradas, um link de mapa do endereço e o contato WhatsApp existente. Os horários são informativos, sem um indicador automático de aberto/fechado. Os ajustes continuam em overlays privados, sem alterar fisicamente a tabela MySQL original.
+
+**Compartilhamento:** matérias RSS, notícias manuais/MySQL, roteiros e eventos têm WhatsApp, Facebook, X, Telegram, LinkedIn, copiar link e compartilhamento nativo quando o navegador oferece suporte. O envio depende da ação do visitante. Configure a **URL pública do site** em Configurações antes de divulgar: um endereço localhost compartilhado não poderá ser aberto por outra pessoa fora do seu computador. Os metadados sociais usam a URL da matéria e, no RSS, a imagem local validada. A plataforma social controla sua própria prévia/cache; os botões não garantem a geração de uma prévia por terceiros.
+
+**Métricas:** o dashboard acrescenta acessos a roteiros/eventos, ranking desses conteúdos e os cliques no WhatsApp das empresas no período escolhido. A deduplicação de 30 minutos por sessão permanece; os acessos administrativos são excluídos. Cliques de contato não significam mensagens enviadas. A coleta dos novos tipos começa após instalar esta versão e depende de JavaScript no navegador.
+
+**Atualização:** copie a versão completa do repositório, incluindo os novos arquivos da raiz (`agenda.php`, `evento.php`, `roteiros.php`, `roteiro.php`, `busca.php`), as pastas `cms` e `assets`, e os arquivos públicos alterados (header, footer, index, scripts, matéria, RSS, guia e métricas). Preserve a configuração e todo o armazenamento privados. Não é necessário reinstalar nem criar banco MySQL: as novas tabelas e os roteiros são preparados sob a mesma trava de migração no SQLite. Recarregue com Ctrl+F5.
+
+Verificações adicionais:
+
+```bash
+php tests/tourism-test.php
+PHP_BIN=php python3 tests/tourism-http-test.py
+PHP_BIN=php python3 tests/tourism-browser-test.py
+```
+
+Os testes cobrem validação de datas, encerramento, publicação/rascunhos, edição e exclusão, busca entre tipos, novos campos/filtros de empresa, links sociais, cópia do link, navegação móvel, ordenação da inicial e métricas. A revisão visual foi feita no Chromium em desktop e celular com dados de teste. O conteúdo factual dos roteiros deve ser revisado pelo proprietário conforme mudanças locais; acesso a fontes externas e implantação real no XAMPP continuam dependendo do ambiente do usuário.

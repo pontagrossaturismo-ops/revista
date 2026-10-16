@@ -1,21 +1,15 @@
 <?php
 require_once __DIR__.'/core.php';
 $guideOptions=['gastronomia'=>['Gastronomia','gastronomia'],'compras'=>['Compras','compras'],'hospedagem'=>['Hospedagem','hospedagem']];
-if (!isset($guideCategory,$guideOptions[$guideCategory])) { http_response_code(404); exit('Página não encontrada.'); }
-[$label,$storeCategory]=$guideOptions[$guideCategory];
-$guide=guia_lojas('categoria',$storeCategory);
-if($guide['state']!=='ok') http_response_code(503);
-$titulo='Guia de '.$label; $pageDescription='Conheça os estabelecimentos de '.$storeCategory.' de Ponta Grossa.';
-$palavrasChave=$storeCategory.', Ponta Grossa'; $url=''; $imagem=''; $noticia=['titulo'=>$titulo,'foto1'=>''];
-include dirname(__DIR__).'/header.php';
+if(!isset($guideCategory,$guideOptions[$guideCategory])) { http_response_code(404); exit('Página não encontrada.'); }
+[$label,$storeCategory]=$guideOptions[$guideCategory]; $guide=guia_lojas('categoria',$storeCategory); if($guide['state']!=='ok') http_response_code(503);
+$query=is_string($_GET['q'] ?? '')?substr(trim($_GET['q']),0,150):''; $neighborhood=is_string($_GET['bairro'] ?? '')?trim($_GET['bairro']):''; $price=is_string($_GET['preco'] ?? '')?trim($_GET['preco']):'';
+$neighborhoods=[]; $prices=[]; foreach($guide['rows'] as $s) { if(!empty($s['bairro'])) $neighborhoods[$s['bairro']]=true; if(!empty($s['faixa_preco'])) $prices[$s['faixa_preco']]=true; } ksort($neighborhoods); ksort($prices);
+$guide['rows']=array_values(array_filter($guide['rows'],fn($s)=>(!$query || str_contains(cms_category(($s['nome'] ?? '').' '.($s['local'] ?? '').' '.($s['descritivo'] ?? '')),cms_category($query))) && (!$neighborhood || ($s['bairro'] ?? '')===$neighborhood) && (!$price || ($s['faixa_preco'] ?? '')===$price)));
+$titulo='Guia de '.$label; $pageDescription='Conheça os estabelecimentos de '.$storeCategory.' de Ponta Grossa.'; $palavrasChave=$storeCategory.', Ponta Grossa'; $url=''; $imagem=''; $noticia=['titulo'=>$titulo,'foto1'=>'']; include dirname(__DIR__).'/header.php';
 ?>
-<section class="page-header"><h1 class="section-title"><?=rss_escape($titulo)?></h1><p class="page-description"><?=rss_escape($pageDescription)?></p>
-<div class="category-filters"><?php foreach($guideOptions as $slug=>$option): ?><a href="indicador-<?=rss_escape($slug)?>.php" class="category-filter <?=$guideCategory===$slug?'active':''?>"><?=rss_escape($option[0])?></a><?php endforeach; ?></div></section>
-<?php guia_notice($guide['state']); ?>
-<?php if($guide['state']==='ok' && !$guide['rows']): ?><p>Nenhum estabelecimento de <?=rss_escape($storeCategory)?> cadastrado no momento.</p><?php endif; ?>
-<div class="noticias-grid"><?php foreach($guide['rows'] as $store): $profile=guia_asset($store['perfil'] ?? '', '../'); ?>
-<article class="noticia-card"><a href="indicador.php?id=<?=rawurlencode($store['url'] ?? '')?>">
-<?php if($profile): ?><img src="<?=rss_escape($profile)?>" alt="<?=rss_escape($store['nome'] ?? 'Estabelecimento')?>" class="img-logos"><?php endif; ?>
-<div class="noticia-content"><h2><?=rss_escape($store['nome'] ?? 'Estabelecimento')?></h2></div></a></article>
-<?php endforeach; ?></div>
+<section class="page-header"><h1 class="section-title"><?=rss_escape($titulo)?></h1><p class="page-description"><?=rss_escape($pageDescription)?></p><div class="category-filters"><?php foreach($guideOptions as $slug=>$option): ?><a href="indicador-<?=rss_escape($slug)?>.php" class="category-filter <?=$guideCategory===$slug?'active':''?>"><?=rss_escape($option[0])?></a><?php endforeach; ?></div></section>
+<form method="get" class="explore-filters"><label>Nome ou palavra-chave<input name="q" value="<?=rss_escape($query)?>"></label><label>Bairro<select name="bairro"><option value="">Todos</option><?php foreach(array_keys($neighborhoods) as $option): ?><option <?=$neighborhood===$option?'selected':''?>><?=rss_escape($option)?></option><?php endforeach; ?></select></label><label>Faixa de preço<select name="preco"><option value="">Todas</option><?php foreach(array_keys($prices) as $option): ?><option <?=$price===$option?'selected':''?>><?=rss_escape($option)?></option><?php endforeach; ?></select></label><button>Filtrar empresas</button><a href="indicador-<?=rss_escape($guideCategory)?>.php">Limpar filtros</a></form><p><?=count($guide['rows'])?> estabelecimentos encontrados</p>
+<?php guia_notice($guide['state']); if($guide['state']==='ok' && !$guide['rows']): ?><p>Nenhum estabelecimento de <?=rss_escape($storeCategory)?> encontrado. Experimente outros filtros.</p><?php endif; ?>
+<div class="noticias-grid"><?php foreach($guide['rows'] as $store): $profile=guia_asset($store['perfil'] ?? ''); ?><article class="noticia-card"><a href="indicador.php?id=<?=rawurlencode($store['url'] ?? '')?>"><img src="<?=rss_escape($profile ?: 'assets/placeholder.svg')?>" alt="<?=rss_escape($store['nome'] ?? 'Estabelecimento')?>" class="img-logos" loading="lazy" width="320" height="200"><div class="noticia-content"><h2><?=rss_escape($store['nome'] ?? 'Estabelecimento')?></h2><p><?=rss_escape($store['bairro'] ?? $store['local'] ?? '')?></p><?php if(!empty($store['faixa_preco'])): ?><span class="guide-price"><?=rss_escape($store['faixa_preco'])?></span><?php endif; ?></div></a></article><?php endforeach; ?></div>
 <?php include dirname(__DIR__).'/footer.php'; ?>

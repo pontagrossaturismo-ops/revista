@@ -1,0 +1,11 @@
+<?php
+require __DIR__.'/cms/tourism.php';
+$filters=[]; foreach(['from','to'] as $key) if(is_string($_GET[$key] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}$/',$_GET[$key])) $filters[$key]=$_GET[$key].($key==='to'?' 23:59':' 00:00');
+if(($_GET['period'] ?? '')==='weekend') { $now=new DateTimeImmutable('now',new DateTimeZone('America/Sao_Paulo')); $start=(int)$now->format('N')>=6?$now->modify('saturday this week'):$now->modify('next saturday'); $filters['from']=$start->format('Y-m-d').' 00:00'; $filters['to']=$start->modify('+1 day')->format('Y-m-d').' 23:59'; }
+$category=is_string($_GET['category'] ?? '')?cms_category($_GET['category']):''; if($category) $filters['category']=$category;
+$events=tourism_events($filters); $titulo='Agenda de eventos'; $pageDescription='Encontre eventos, cultura e programação em Ponta Grossa.'; $url=''; $imagem=''; $palavrasChave='agenda, eventos'; $noticia=['titulo'=>$titulo,'foto1'=>'']; include __DIR__.'/header.php';
+?>
+<section class="discovery-heading"><p class="eyebrow">O que fazer</p><h1>Agenda de eventos</h1><p>Escolha uma data e encontre a próxima experiência.</p><a class="action-link" href="agenda.php?period=weekend">Neste fim de semana</a></section>
+<form method="get" class="explore-filters"><label>De<input type="date" name="from" value="<?=rss_escape(substr($filters['from'] ?? '',0,10))?>"></label><label>Até<input type="date" name="to" value="<?=rss_escape(substr($filters['to'] ?? '',0,10))?>"></label><label>Categoria<select name="category"><option value="">Todas</option><?php foreach(tourism_db()->query("SELECT DISTINCT category FROM tourism_events WHERE published=1 ORDER BY category") as $c): ?><option value="<?=rss_escape($c['category'])?>" <?=$category===$c['category']?'selected':''?>><?=rss_escape(cms_category_label($c['category']))?></option><?php endforeach; ?></select></label><button>Filtrar eventos</button><a href="agenda.php">Limpar filtros</a></form>
+<?php if(!$events): ?><div class="empty-state"><h2>Nenhum evento disponível neste período</h2><p>Confira outras datas ou explore nossos roteiros para planejar o passeio.</p><a href="roteiros.php">Explorar roteiros</a></div><?php endif; ?><div class="discovery-grid"><?php foreach($events as $r) tourism_card($r,true); ?></div>
+<?php include __DIR__.'/footer.php'; ?>

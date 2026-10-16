@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!slider) return;
 
         const slides = document.querySelectorAll('.slide');
+        if (!slides.length) return;
         let currentSlide = 0;
         let slideInterval;
         let isPaused = false;
@@ -104,6 +105,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const toggleMenu = function() {
             menuToggle.classList.toggle('active');
+            menuToggle.setAttribute('aria-expanded',menuToggle.classList.contains('active')?'true':'false');
             
             if (mainNav.style.display === 'flex') {
                 mainNav.style.display = 'none';
@@ -133,6 +135,7 @@ document.addEventListener('DOMContentLoaded', function() {
             item.addEventListener('click', function() {
                 if (window.innerWidth <= 992) {
                     menuToggle.classList.remove('active');
+                    menuToggle.setAttribute('aria-expanded','false');
                     mainNav.style.display = 'none';
                     document.body.style.overflow = 'auto';
                 }
@@ -151,6 +154,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const toggleSearch = function() {
             if (searchContainer) {
                 searchContainer.classList.toggle('active');
+                if(searchIcon) searchIcon.setAttribute('aria-expanded',searchContainer.classList.contains('active')?'true':'false');
                 
                 if (searchContainer.classList.contains('active')) {
                     searchContainer.querySelector('input').focus();

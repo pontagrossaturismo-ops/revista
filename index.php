@@ -1,66 +1,13 @@
 <?php
-require_once __DIR__.'/cms/core.php';
-$pageStyles=['cms/site.css'];
-$titulo=rss_escape(revista_setting('SITE_TITLE','Revista PG Turismo')); $pageDescription=rss_escape(revista_setting('SITE_DESCRIPTION','Turismo, lazer, gastronomia e notícias'));
-$palavrasChave='turismo, notícias'; $url=rss_escape(revista_setting('SITE_URL','')); $imagem=''; $noticia=['titulo'=>$titulo,'foto1'=>''];
-include 'header.php';
+require_once __DIR__.'/cms/tourism.php'; $allNews=cms_news_entries();
+$pageStyles=['cms/site.css']; $titulo=rss_escape(revista_setting('SITE_TITLE','Revista PG Turismo')); $pageDescription=rss_escape(revista_setting('SITE_DESCRIPTION','Turismo, lazer, gastronomia e notícias')); $palavrasChave='turismo, notícias'; $url=rss_escape(revista_setting('SITE_URL','')); $imagem=''; $noticia=['titulo'=>$titulo,'foto1'=>'']; include __DIR__.'/header.php';
+cms_render_spotlight($allNews);
 ?>
-<br>
-
-<h2 > &nbsp; Última Edição</h2>
-
-<section class="destaque"  >
-    <div class="slider" style="background-color: #ddd; padding-top: 2px " align="center" >
-        <!-- Slides dinâmicos com PHP -->
-        
-        <?php // include 'slider-destaque.php'; 
-        
-        if (is_file(__DIR__.'/edicoes/issuu101.html')) include __DIR__.'/edicoes/issuu101.html';
-        
-        ?>
-             
-    </div>
-</section>
-
-<?php $allNews=cms_news_entries(); cms_render_spotlight($allNews); foreach(cms_db()->query('SELECT * FROM cms_sections WHERE active=1 ORDER BY position,id') as $section):
-$items=array_slice(array_values(array_filter($allNews,fn($entry)=>$entry['category']===$section['category'])),0,4); ?>
-<section class="home-section" style="--section-color:<?=rss_escape($section['color'])?>" data-section="<?=rss_escape($section['category'])?>">
-<div class="home-section-heading"><h2 class="section-title"><?=rss_escape($section['title'])?></h2><a href="categoria.php?categoria=<?=rawurlencode($section['category'])?>">Ver mais</a></div>
-<div class="home-news-grid"><?php foreach($items as $entry) cms_render_card($entry); ?></div>
-<?php if(!$items): ?><p>Novas notícias em breve.</p><?php endif; ?></section>
-<?php cms_render_banners('home',$section['id']); endforeach; ?>
-
-<div style="background: #f0f0f0; border-radius: 10px; box-shadow: var(--shadow-md); border: #ddd 2px solid; padding: 10px" ><br>
-
-
-
-    <div class="margem80" align="center" >
-
-   
-
-        
-       <h2 style="margin-top: 0px"> <strong>Conheça AQUI os melhores estabelecimetos de Ponta Grossa!</strong></h2>
-            
-         <a href="indicador-gastronomia.php" >
-            <img src="img/iconGastro2.png" class="iconeConv" />
-         </a>
-        
-         <a href="indicador-compras.php" >
-            <img src="img/iconCompras2.png"  class="iconeConv" />
-         </a>
-        
-          <a href="indicador-hospedagem.php" >
-            <img src="img/iconHosp2.png"  class="iconeConv" />
-         </a>
-        
-
-        
-
-    
-    </div>
-    <br>
-</div>
-<br>
-
-
-<?php include 'footer.php'; ?>
+<section class="planning-strip" aria-label="Planeje sua visita"><div><p class="eyebrow">Ponta Grossa e Campos Gerais</p><h1>Seu próximo passeio começa aqui.</h1></div><div class="trip-links"><a href="roteiros.php">Explore os roteiros →</a><a href="agenda.php?period=weekend">Neste fim de semana →</a><a href="busca.php">Buscar no site →</a></div></section>
+<section id="ultima-edicao" class="edition-section"><div class="home-section-heading"><h2 class="section-title">Última Edição</h2></div><?php if(is_file(__DIR__.'/edicoes/issuu101.html')): ?><div class="edition-frame"><?php include __DIR__.'/edicoes/issuu101.html'; ?></div><?php else: ?><div class="edition-empty"><strong>Revista PG Turismo</strong><p>Notícias, destinos e experiências dos Campos Gerais. A edição digital será disponibilizada neste espaço.</p></div><?php endif; ?></section>
+<?php foreach(cms_db()->query('SELECT * FROM cms_sections WHERE active=1 ORDER BY position,id') as $section): $items=array_slice(array_values(array_filter($allNews,fn($entry)=>$entry['category']===$section['category'])),0,4); ?>
+<section class="home-section" style="--section-color:<?=rss_escape($section['color'])?>" data-section="<?=rss_escape($section['category'])?>"><div class="home-section-heading"><h2 class="section-title"><?=rss_escape($section['title'])?></h2><a href="categoria.php?categoria=<?=rawurlencode($section['category'])?>">Ver mais</a></div><div class="home-news-grid"><?php foreach($items as $entry) cms_render_card($entry); ?></div><?php if(!$items): ?><p>Novas notícias em breve.</p><?php endif; ?></section><?php cms_render_banners('home',$section['id']); endforeach; ?>
+<?php $routes=tourism_routes(); if($routes): ?><section class="discovery-section"><div class="home-section-heading"><div><p class="eyebrow">Viva a cidade</p><h2 class="section-title">Roteiros para o seu ritmo</h2></div><a href="roteiros.php">Todos os roteiros →</a></div><div class="discovery-grid"><?php foreach(array_slice($routes,0,4) as $r) tourism_card($r); ?></div></section><?php endif; ?>
+<section class="discovery-section"><div class="home-section-heading"><h2 class="section-title">Na agenda</h2><a href="agenda.php">Ver programação →</a></div><?php $upcoming=array_slice(tourism_events(),0,3); if($upcoming): ?><div class="discovery-grid"><?php foreach($upcoming as $r) tourism_card($r,true); ?></div><?php else: ?><p>Consulte a agenda para acompanhar a programação e descubra os roteiros disponíveis para sua próxima visita.</p><?php endif; ?></section>
+<section class="discovery-section"><h2 class="section-title">Encontre seu lugar em Ponta Grossa</h2><div class="guide-shortcuts"><a href="indicador-gastronomia.php"><span>Gastronomia</span><strong>Onde comer</strong><p>Sabores, restaurantes e cafés.</p></a><a href="indicador-hospedagem.php"><span>Hospedagem</span><strong>Onde ficar</strong><p>Planeje sua estadia na cidade.</p></a><a href="indicador-compras.php"><span>Compras e serviços</span><strong>Conheça o comércio</strong><p>Encontre empresas e contatos locais.</p></a></div></section>
+<?php include __DIR__.'/footer.php'; ?>
