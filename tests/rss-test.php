@@ -18,6 +18,17 @@ $items[0]['image_file']=rss_cache_image($items[0]['image'],fn($url,$limit)=>[$pn
 $atom='<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>atom1</id><title>Atom</title><link rel="self" href="https://example.com/feed"/><link rel="alternate" href="https://example.com/atom"/><summary>Teste</summary><updated>2026-01-01T00:00:00Z</updated></entry></feed>';
 $atoms=rss_parse($atom,'https://example.com/'); check(count($atoms)===1 && $atoms[0]['url']==='https://example.com/atom','Atom com namespace');
 rejects(fn()=>rss_parse('<!DOCTYPE rss [<!ENTITY x SYSTEM "file:///etc/passwd">]><rss/>','https://example.com/'),'XXE bloqueado');
+$externalLoads=0; $oldLoader=libxml_get_external_entity_loader(); libxml_set_external_entity_loader(function() use (&$externalLoads) { $externalLoads++; return null; });
+check(count(rss_parse('<!DOCTYPE rss SYSTEM "https://example.invalid/external.dtd">'.$fixture,'https://example.com/'))===1,'DOCTYPE externo ignorado sem carregar DTD');
+check(count(rss_parse('<!DOCTYPE rss PUBLIC "-//Example//DTD RSS//EN" "file:///not-readable.dtd">'.$fixture,'https://example.com/'))===1,'DOCTYPE PUBLIC ignorado sem ler arquivo');
+libxml_set_external_entity_loader($oldLoader); check($externalLoads===0,'Nenhuma DTD externa foi carregada');
+check(count(rss_parse('<!DOCTYPE rss>'.$fixture,'https://example.com/'))===1,'DOCTYPE simples aceito');
+check(count(rss_parse(str_replace('Resumo','Texto <!DOCTYPE html> <!ENTITY exemplo>',$fixture),'https://example.com/'))===1,'Texto em CDATA não bloqueia feed');
+rejects(fn()=>rss_parse('<!DOCTYPE rss [<!ENTITY % remote SYSTEM "https://example.invalid/xxe">%remote;]>'.$fixture,'https://example.com/'),'Entidade externa de parâmetro bloqueada');
+rejects(fn()=>rss_parse('<!DOCTYPE rss [<!ENTITY x "expansion">]>'.$fixture,'https://example.com/'),'Expansão de entidade interna bloqueada');
+rejects(fn()=>rss_parse("\xff\xfe".iconv('UTF-8','UTF-16LE',$fixture),'https://example.com/'),'Codificação com bytes nulos bloqueada');
+try { rss_parse('<!DOCTYPE html><html><body>Access denied</body></html>','https://example.com/'); check(false,'HTML deve falhar'); }
+catch(RuntimeException $e) { check(str_contains($e->getMessage(),'página HTML'),'Erro de HTML explica URL ou bloqueio'); }
 rejects(fn()=>rss_parse('<html/>','https://example.com/'),'HTML não aceito');
 rejects(fn()=>rss_parse('<rss>','https://example.com/'),'XML inválido');
 rejects(fn()=>rss_url('file:///etc/passwd'),'Esquema inválido');

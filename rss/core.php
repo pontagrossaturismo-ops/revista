@@ -70,8 +70,25 @@ function rss_fetch($url,$maxBytes=2097152) {
     throw new RuntimeException('Redirecionamentos em excesso.');
 }
 function rss_text($value) { return trim(html_entity_decode(strip_tags((string)$value), ENT_QUOTES | ENT_HTML5, 'UTF-8')); }
+function rss_prepare_xml($xml) {
+    // A declaração de tipo pode existir em feeds legítimos, mas nunca é carregada.
+    if(str_contains($xml,"\0")) throw new RuntimeException('Codificação XML não suportada. Use um feed UTF-8.');
+    $masked=preg_replace_callback('~<!--.*?-->|<!\[CDATA\[.*?\]\]>~s',fn($m)=>str_repeat(' ',strlen($m[0])),$xml);
+    if(preg_match('/<!ENTITY/i',$masked)) throw new RuntimeException('O feed contém declarações de entidades XML não permitidas.');
+    $doctype=<<<'REGEX'
+~<!DOCTYPE\s+[A-Za-z_:][A-Za-z0-9_.:-]*(?:\s+(?:SYSTEM\s+(?:"[^"]*"|'[^']*')|PUBLIC\s+(?:"[^"]*"|'[^']*')\s+(?:"[^"]*"|'[^']*')))?\s*>~i
+REGEX;
+    preg_match_all($doctype,$masked,$matches,PREG_OFFSET_CAPTURE);
+    foreach(array_reverse($matches[0]) as [$declaration,$offset]) {
+        $xml=substr_replace($xml,str_repeat(' ',strlen($declaration)),$offset,strlen($declaration));
+        $masked=substr_replace($masked,str_repeat(' ',strlen($declaration)),$offset,strlen($declaration));
+    }
+    if(preg_match('/<!DOCTYPE/i',$masked)) throw new RuntimeException('O feed contém uma DTD interna não permitida. Solicite uma versão RSS sem declarações de entidades.');
+    if(preg_match('~^\s*(?:<\?xml[^>]*>\s*)?(?:<!--.*?-->\s*)*<html(?:\s|>)~is',ltrim($xml,"\xEF\xBB\xBF"))) throw new RuntimeException('O endereço retornou uma página HTML, não um feed RSS/Atom. Confira a URL da fonte; pode ser uma página do site ou um bloqueio do servidor.');
+    return $xml;
+}
 function rss_parse($xml, $base) {
-    if (preg_match('/<!DOCTYPE|<!ENTITY/i', $xml)) throw new RuntimeException('Declarações XML externas bloqueadas.');
+    $xml=rss_prepare_xml($xml);
     $previous=libxml_use_internal_errors(true);
     try { $root=simplexml_load_string($xml, SimpleXMLElement::class, LIBXML_NONET | LIBXML_NOCDATA); }
     finally { libxml_clear_errors(); libxml_use_internal_errors($previous); }

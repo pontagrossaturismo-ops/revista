@@ -235,3 +235,8 @@ php tests/dashboard-test.php
 PHP_BIN=php python3 tests/metrics-http-test.py
 PHP_BIN=php python3 tests/layout-browser-test.py
 ```
+
+
+### Erros de declaração XML e endereço HTML
+
+O importador ignora declarações `DOCTYPE` simples, SYSTEM ou PUBLIC, sem carregar DTDs externas. Entidades e DTDs internas continuam bloqueadas. Textos de exemplo dentro de CDATA ou comentários não são tratados como declarações XML. Se a resposta for uma página HTML (incluindo páginas de bloqueio), o painel informa que o endereço não retornou RSS/Atom. Nesse caso, confira a URL RSS oficial; alterar o leitor não elimina bloqueios do servidor da fonte. Após atualizar os arquivos, clique em **Atualizar RSS agora**: o histórico antigo é preservado, e o resultado corrigido aparece em uma nova execução.
