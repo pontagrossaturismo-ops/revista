@@ -6,6 +6,17 @@ check(rss_public_ips('cache-test.example',$resolver)===['93.184.216.34'],'Resolv
 check(rss_public_ips('CACHE-TEST.EXAMPLE',fn()=>throw new RuntimeException('DNS temporariamente indisponível'))===['93.184.216.34'] && $count===1,'Reutilizar resolução validada durante a execução');
 $failed=false; try { rss_public_ips('private-test.example',fn()=>['127.0.0.1']); } catch(Throwable $e) { $failed=true; } check($failed,'Cache não permite endereço privado');
 check(rss_public_ips('private-test.example',fn()=>['93.184.216.34'])===['93.184.216.34'],'Não guardar resolução rejeitada');
+$recordCalls=0; $windows=rss_resolve_host('windows-resolver.example',fn()=>['93.184.216.34'],function() use (&$recordCalls) { $recordCalls++; return []; });
+check($windows===['93.184.216.34'] && $recordCalls===0,'Resolvedor do sistema funciona sem dns_get_record, como no XAMPP');
+$ipv6=rss_resolve_host('ipv6-only.example',fn()=>false,fn()=>['2606:4700:4700::1111']);
+check($ipv6===['2606:4700:4700::1111'],'Usar alternativa quando sistema não retorna IPv4');
+$cname=rss_resolve_host('cname-test.example',fn()=>['93.184.216.34','93.184.216.34'],fn()=>[]);
+check($cname===['93.184.216.34'],'Aceitar resolução do sistema com CNAME e remover duplicatas');
+$blocked=false; try { rss_public_ips('hosts-private.example',fn($host)=>rss_resolve_host($host,fn()=>['192.168.1.5'],fn()=>['93.184.216.34'])); } catch(Throwable $e) { $blocked=true; }
+check($blocked,'Resolvedor do sistema continua bloqueando endereço privado, sem trocar para outro público');
+$failed=false; try { rss_public_ips('missing-dns.example',fn($host)=>rss_resolve_host($host,fn()=>false,fn()=>[])); } catch(Throwable $e) { $failed=str_contains($e->getMessage(),'Falha de DNS') && str_contains($e->getMessage(),'missing-dns.example'); }
+check($failed,'Explicar falha dos dois resolvedores identificando o domínio');
+check(rss_public_ips('missing-dns.example',fn()=>['93.184.216.34'])===['93.184.216.34'],'Nova tentativa após falha de DNS não fica presa no cache');
 $article=['id'=>1,'title'=>'Matéria preservada','articleBody'=>'<p>Texto</p>','mainImage'=>'https://example.com/photo.jpg','createdAt'=>'2026-10-01'];
 $fetch=fn($url)=>[json_encode(['data'=>str_contains($url,'?')?['items'=>[['id'=>1],['id'=>2]]]:$article]),$url];
 $ticks=0; $clock=function() use (&$ticks) { return $ticks++*40; };

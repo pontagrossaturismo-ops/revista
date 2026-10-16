@@ -287,3 +287,12 @@ A resolução de cada domínio público validado é reutilizada durante a mesma 
 O adaptador OFEC verifica um orçamento de dois minutos entre as requisições da lista/detalhes e interrompe três falhas consecutivas. Os itens já obtidos são processados e os anteriores permanecem armazenados. Falhas na página 3 não descartam as páginas 1 e 2. O orçamento do adaptador não inclui o download posterior das imagens; cada download usa os limites de rede do importador. Falhas de DNS ou indisponibilidade da API ainda dependem da conexão do XAMPP/hospedagem, mas não devem remover as notícias existentes.
 
 Atualize a pasta `rss` e `rss-admin.php`. Se um processo antigo permanecer executando a importação, deixe-o terminar ou encerre-o antes de testar a nova versão. Clique em **Atualizar RSS agora** para buscar novamente os itens ainda oferecidos pela fonte. `php tests/network-guards-test.php` cobre o cache de DNS validado, a interrupção após falhas, o orçamento de tempo e a preservação das duas primeiras páginas quando a terceira falha.
+
+
+### Várias fontes com erro de DNS no XAMPP
+
+O importador tenta primeiro `gethostbynamel`, que utiliza o resolvedor IPv4 do sistema operacional e acompanha aliases CNAME. Se não houver resultado, tenta os registros A/AAAA por `dns_get_record`. A versão anterior usava somente a consulta direta de registros, que pode retornar vazia em algumas instalações Windows mesmo quando o resolvedor do sistema funciona. Endereços retornados por qualquer caminho passam pela mesma validação de IP público e são fixados na conexão cURL; a mudança não libera IPs privados nem desativa TLS. Resultados de falhas não ficam guardados no cache.
+
+Atualize `rss/core.php` (ou toda a pasta `rss`), reinicie o Apache para encerrar processos antigos e faça uma atualização manual. Entradas de erro antigas permanecem no histórico; confira a execução nova. A nova mensagem identifica o domínio quando os dois caminhos falham. Esse caso ainda exige verificar DNS/conectividade no Windows/hospedagem; a correção não garante acesso a uma fonte que esteja indisponível.
+
+`php tests/network-guards-test.php` simula a resolução pelo sistema com consulta direta indisponível, a alternativa IPv6, aliases/duplicatas, bloqueio de endereços privados e uma nova tentativa bem-sucedida após falha. O comportamento real no XAMPP Windows continua dependendo da configuração local.

@@ -55,12 +55,22 @@ function rss_url($url) {
     if (!$p || !in_array(strtolower($p['scheme'] ?? ''), ['http','https'], true) || empty($p['host']) || isset($p['user']) || isset($p['pass']) || (isset($p['port']) && !in_array($p['port'], [80,443], true))) throw new InvalidArgumentException('Use uma URL pública HTTP ou HTTPS, sem autenticação.');
     return trim($url);
 }
+function rss_resolve_host($host,$systemResolver=null,$recordResolver=null) {
+    // Usa o resolvedor do sistema, compatível com Windows e cadeias CNAME.
+    $systemResolver=$systemResolver ?? static fn($name)=>function_exists('gethostbynamel') ? (@gethostbynamel($name) ?: []) : [];
+    $addresses=$systemResolver($host);
+    if(is_array($addresses) && $addresses) return array_values(array_unique($addresses));
+    // Alternativa para ambientes sem resolvedor IPv4 do sistema (inclui IPv6).
+    $recordResolver=$recordResolver ?? static fn($name)=>function_exists('dns_get_record') ? array_merge(array_column(@dns_get_record($name,DNS_A) ?: [],'ip'),array_column(@dns_get_record($name,DNS_AAAA) ?: [],'ipv6')) : [];
+    $addresses=$recordResolver($host);
+    return is_array($addresses) ? array_values(array_unique($addresses)) : [];
+}
 function rss_public_ips($host,$resolver=null) {
     static $cache=[]; $key=strtolower($host);
     if(isset($cache[$key])) return $cache[$key];
-    $resolver=$resolver ?? fn($name)=>array_merge(array_column(@dns_get_record($name,DNS_A) ?: [],'ip'),array_column(@dns_get_record($name,DNS_AAAA) ?: [],'ipv6'));
+    $resolver=$resolver ?? 'rss_resolve_host';
     $ips=filter_var($host,FILTER_VALIDATE_IP)?[$host]:$resolver($host);
-    if (!$ips) throw new RuntimeException('Domínio sem endereço público.');
+    if (!$ips) throw new RuntimeException('Falha de DNS ao resolver '.$host.'. Os resolvedores do sistema e do PHP não retornaram um endereço IP.');
     foreach ($ips as $ip) if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) || (str_contains($ip, ':') && !preg_match('/^[23][0-9a-f]{3}:/i', $ip)) || (!str_contains($ip, ':') && (int)explode('.', $ip)[0] >= 224)) throw new RuntimeException('Endereço privado ou reservado bloqueado.');
     return $cache[$key]=$ips;
 }
