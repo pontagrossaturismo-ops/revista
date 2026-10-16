@@ -26,10 +26,12 @@ function rss_ofec_article($row,$expectedId) {
     if($stamp>time()+86400) $stamp=time();
     return ['identity'=>hash('sha256','ofec:'.$expectedId),'title'=>$title,'url'=>'https://operarioferroviario.com.br/noticias/'.$expectedId,'summary'=>rss_body_text(rss_ofec_string($row['description'] ?? '')),'body'=>$body,'image'=>$image,'published_at'=>gmdate('Y-m-d H:i:s',$stamp),'credit'=>rss_text(rss_ofec_string($row['photographer'] ?? ''))];
 }
-function rss_ofec_items($fetcher,$progress=null) {
+function rss_ofec_items($fetcher,$progress=null,$clock=null) {
+    $clock=$clock ?? static fn()=>hrtime(true)/1000000000; $deadline=$clock()+120; $consecutiveFailures=0;
     $api='https://fancontentapi.fanbase.com.br/api/owner/195/newsArticles'; $items=[]; $errors=[]; $seen=[]; $skipped=0;
     // Até 90 notícias por execução, sem percorrer todo o arquivo do clube.
     for($page=1;$page<=3;$page++) {
+        if($clock()>=$deadline) { $errors[]='Limite de 2 minutos da consulta OFEC atingido; notícias já obtidas serão preservadas.'; break; }
         if($progress) $progress('OFEC: consultando lista de notícias, página '.$page.'...');
         try { $data=rss_ofec_json($fetcher,$api.'?page='.$page.'&size=30'); if(!isset($data['items']) || !is_array($data['items'])) throw new RuntimeException('A lista da API OFEC mudou de formato (items ausente).'); }
         catch(Throwable $e) { if($page===1) throw $e; $errors[]='Página '.$page.': '.$e->getMessage(); break; }
@@ -38,9 +40,10 @@ function rss_ofec_items($fetcher,$progress=null) {
             $id=is_array($row)?($row['id'] ?? null):null;
             if(!is_scalar($id) || !preg_match('/^[1-9][0-9]{0,17}$/',(string)$id)) { $errors[]='Identificador inválido na lista OFEC.'; continue; }
             if(isset($seen[(string)$id])) continue; $seen[(string)$id]=true;
+            if($clock()>=$deadline) { $errors[]='Limite de 2 minutos da consulta OFEC atingido; notícias já obtidas serão preservadas.'; break 2; }
             if($progress) $progress('OFEC: buscando matéria '.$id.'...');
-            try { $article=rss_ofec_article(rss_ofec_json($fetcher,$api.'/'.$id),$id); if($article) $items[]=$article; else $skipped++; }
-            catch(Throwable $e) { $errors[]='Matéria '.$id.': '.$e->getMessage(); if($progress) $progress(end($errors)); }
+            try { $article=rss_ofec_article(rss_ofec_json($fetcher,$api.'/'.$id),$id); if($article) $items[]=$article; else $skipped++; $consecutiveFailures=0; }
+            catch(Throwable $e) { $errors[]='Matéria '.$id.': '.$e->getMessage(); if($progress) $progress(end($errors)); if(++$consecutiveFailures>=3) { $errors[]='Consulta OFEC interrompida após três falhas consecutivas. Notícias anteriores foram preservadas.'; break 2; } }
         }
         if(count($rows)<30 || (isset($data['totalPages']) && $page>=(int)$data['totalPages'])) break;
     }

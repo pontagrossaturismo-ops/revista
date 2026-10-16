@@ -55,11 +55,14 @@ function rss_url($url) {
     if (!$p || !in_array(strtolower($p['scheme'] ?? ''), ['http','https'], true) || empty($p['host']) || isset($p['user']) || isset($p['pass']) || (isset($p['port']) && !in_array($p['port'], [80,443], true))) throw new InvalidArgumentException('Use uma URL pública HTTP ou HTTPS, sem autenticação.');
     return trim($url);
 }
-function rss_public_ips($host) {
-    $ips = filter_var($host, FILTER_VALIDATE_IP) ? [$host] : array_merge(array_column(@dns_get_record($host, DNS_A) ?: [], 'ip'), array_column(@dns_get_record($host, DNS_AAAA) ?: [], 'ipv6'));
+function rss_public_ips($host,$resolver=null) {
+    static $cache=[]; $key=strtolower($host);
+    if(isset($cache[$key])) return $cache[$key];
+    $resolver=$resolver ?? fn($name)=>array_merge(array_column(@dns_get_record($name,DNS_A) ?: [],'ip'),array_column(@dns_get_record($name,DNS_AAAA) ?: [],'ipv6'));
+    $ips=filter_var($host,FILTER_VALIDATE_IP)?[$host]:$resolver($host);
     if (!$ips) throw new RuntimeException('Domínio sem endereço público.');
     foreach ($ips as $ip) if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) || (str_contains($ip, ':') && !preg_match('/^[23][0-9a-f]{3}:/i', $ip)) || (!str_contains($ip, ':') && (int)explode('.', $ip)[0] >= 224)) throw new RuntimeException('Endereço privado ou reservado bloqueado.');
-    return $ips;
+    return $cache[$key]=$ips;
 }
 function rss_resolve($base, $ref) {
     $ref = trim($ref);
@@ -71,13 +74,16 @@ function rss_resolve($base, $ref) {
     return rss_url($p['scheme'] . '://' . $p['host'] . (isset($p['port']) ? ':' . $p['port'] : '') . $path);
 }
 function rss_fetch($url,$maxBytes=2097152) {
+    $deadline=hrtime(true)+15000000000;
     for ($redirect=0; $redirect<5; $redirect++) {
         $url = rss_url($url); $p = parse_url($url); $ips = rss_public_ips($p['host']);
+        $remaining=(int)(($deadline-hrtime(true))/1000000);
+        if($remaining<=0) throw new RuntimeException('Tempo limite ao consultar a fonte (15 segundos).');
         $port = $p['port'] ?? ($p['scheme'] === 'https' ? 443 : 80);
         $body = ''; $location = ''; $overflow = false;
         $ch = curl_init($url);
         $ip = $ips[0]; if (str_contains($ip, ':')) $ip = '[' . $ip . ']';
-        curl_setopt_array($ch, [CURLOPT_FOLLOWLOCATION=>false, CURLOPT_CONNECTTIMEOUT=>5, CURLOPT_TIMEOUT=>15, CURLOPT_PROTOCOLS=>CURLPROTO_HTTP | CURLPROTO_HTTPS, CURLOPT_PROXY=>'', CURLOPT_RESOLVE=>[$p['host'].':'.$port.':'.$ip], CURLOPT_USERAGENT=>'RevistaPG-RSS/1.0', CURLOPT_SSL_VERIFYPEER=>true, CURLOPT_SSL_VERIFYHOST=>2,
+        curl_setopt_array($ch, [CURLOPT_FOLLOWLOCATION=>false, CURLOPT_CONNECTTIMEOUT_MS=>min(5000,$remaining), CURLOPT_TIMEOUT_MS=>$remaining, CURLOPT_NOSIGNAL=>true, CURLOPT_LOW_SPEED_LIMIT=>128, CURLOPT_LOW_SPEED_TIME=>10, CURLOPT_NOPROGRESS=>false, CURLOPT_XFERINFOFUNCTION=>static function($handle,$total,$downloaded,$uploadTotal,$uploaded) use ($deadline) { return hrtime(true)>=$deadline?1:0; }, CURLOPT_PROTOCOLS=>CURLPROTO_HTTP | CURLPROTO_HTTPS, CURLOPT_PROXY=>'', CURLOPT_RESOLVE=>[$p['host'].':'.$port.':'.$ip], CURLOPT_USERAGENT=>'RevistaPG-RSS/1.0', CURLOPT_SSL_VERIFYPEER=>true, CURLOPT_SSL_VERIFYHOST=>2,
             CURLOPT_WRITEFUNCTION=>function($ch,$chunk) use (&$body,&$overflow,$maxBytes) { if (strlen($body)+strlen($chunk)>$maxBytes) { $overflow=true; return 0; } $body.=$chunk; return strlen($chunk); },
             CURLOPT_HEADERFUNCTION=>function($ch,$line) use (&$location) { if (stripos($line,'Location:')===0) $location=trim(substr($line,9)); return strlen($line); }]);
         $ok = curl_exec($ch); $code = curl_getinfo($ch,CURLINFO_HTTP_CODE); $error=curl_error($ch); curl_close($ch);

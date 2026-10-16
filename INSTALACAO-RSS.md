@@ -278,3 +278,12 @@ O armazenamento deve estar em disco local com suporte a bloqueios e ao modo WAL.
 A limpeza separa notícias publicadas de pendências de imagem/fontes pausadas e usa a ordem de cadastro. Uma falha ao atualizar a imagem preserva o arquivo anterior quando ele continua válido. O teste `php tests/publication-retention-test.php` reproduz uma notícia antiga da OFEC junto de 100 itens novos sem foto de outra fonte, a entrada de uma matéria com data de publicação antiga e a troca de URL da foto seguida de falha no download.
 
 Atualize `rss/core.php` e `rss-admin.php` e execute uma nova atualização manual para tentar recuperar os itens que a versão anterior removeu. A recuperação depende de essas notícias ainda serem fornecidas pela API; o importador consulta até 90 por execução. Não reinstale nem recrie a fonte: o identificador existente e o histórico são preservados. Se a fonte mostrar notícias armazenadas, mas nenhuma publicada, confira os erros de imagem recentes e o resultado da última execução.
+
+
+### OFEC: timeout e falha de DNS durante a consulta
+
+A resolução de cada domínio público validado é reutilizada durante a mesma execução, mantendo a fixação do IP no cURL. Isso evita repetir consultas DNS para cada detalhe da OFEC. Os limites de conexão/transferência são explícitos em milissegundos; os redirecionamentos compartilham o orçamento de 15 segundos da requisição, e uma verificação de tempo monotônico interrompe transferências demoradas. Uma resolução DNS nativa bloqueada pelo sistema operacional pode ultrapassar o orçamento antes de devolver o controle ao PHP.
+
+O adaptador OFEC verifica um orçamento de dois minutos entre as requisições da lista/detalhes e interrompe três falhas consecutivas. Os itens já obtidos são processados e os anteriores permanecem armazenados. Falhas na página 3 não descartam as páginas 1 e 2. O orçamento do adaptador não inclui o download posterior das imagens; cada download usa os limites de rede do importador. Falhas de DNS ou indisponibilidade da API ainda dependem da conexão do XAMPP/hospedagem, mas não devem remover as notícias existentes.
+
+Atualize a pasta `rss` e `rss-admin.php`. Se um processo antigo permanecer executando a importação, deixe-o terminar ou encerre-o antes de testar a nova versão. Clique em **Atualizar RSS agora** para buscar novamente os itens ainda oferecidos pela fonte. `php tests/network-guards-test.php` cobre o cache de DNS validado, a interrupção após falhas, o orçamento de tempo e a preservação das duas primeiras páginas quando a terceira falha.
