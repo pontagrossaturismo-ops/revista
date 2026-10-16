@@ -27,12 +27,16 @@ with tempfile.TemporaryDirectory(prefix='revista-metrics-') as tmp:
             for _ in range(50):
                 try: status,html,_=req(admin,'admin.php'); break
                 except urllib.error.URLError: time.sleep(.1)
+            check(req(guest,'ofec-diagnostico.php')[0]==403,'Diagnóstico OFEC exige login')
             csrf=re.search('name="csrf" value="([^"]+)"',html)[1]
             check(req(guest,'rss-atualizar.php',{'manual':1,'csrf':csrf})[0]==403,'Atualização manual exige login')
             check(req(guest,'rss-atualizar.php')[0]==405,'Atualização exige POST')
             check(json.loads(req(guest,'rss-atualizar.php',{})[1])['state']=='done','Primeiro acionamento automático')
             check(json.loads(req(guest,'rss-atualizar.php',{})[1])['state']=='waiting','Próximo acionamento aguarda 12h')
             req(admin,'admin.php',{'csrf':csrf,'password':'test-metrics-password'})
+            check('Gerar e baixar diagnóstico OFEC' in req(admin,'ofec-diagnostico.php')[1],'Formulário de diagnóstico autenticado')
+            check(req(admin,'ofec-diagnostico.php',{'csrf':'bad'})[0]==403,'CSRF protege diagnóstico OFEC')
+            check('ofec-diagnostico.php' in req(admin,'admin.php?area=settings')[1],'Configurações disponibilizam diagnóstico OFEC')
             check(req(admin,'rss-atualizar.php',{'manual':1,'csrf':'bad'})[0]==403,'CSRF protege importação manual')
             check(json.loads(req(admin,'rss-atualizar.php',{'manual':1,'csrf':csrf})[1])['state']=='done','Botão manual antecipa intervalo')
             check(req(guest,'metricas.php',{'page':'noticia.php','id':1})[0]==204,'Registrar acesso público')

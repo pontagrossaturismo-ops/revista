@@ -240,3 +240,8 @@ PHP_BIN=php python3 tests/layout-browser-test.py
 ### Erros de declaração XML e endereço HTML
 
 O importador ignora declarações `DOCTYPE` simples, SYSTEM ou PUBLIC, sem carregar DTDs externas. Entidades e DTDs internas continuam bloqueadas. Textos de exemplo dentro de CDATA ou comentários não são tratados como declarações XML. Se a resposta for uma página HTML (incluindo páginas de bloqueio), o painel informa que o endereço não retornou RSS/Atom. Nesse caso, confira a URL RSS oficial; alterar o leitor não elimina bloqueios do servidor da fonte. Após atualizar os arquivos, clique em **Atualizar RSS agora**: o histórico antigo é preservado, e o resultado corrigido aparece em uma nova execução.
+
+
+### Diagnóstico da página OFEC
+
+O site da OFEC usa módulos JavaScript carregados sob demanda; salvar a página pelo navegador pode omitir esses módulos. Em **admin.php → Configurações → Gerar diagnóstico da OFEC**, o botão baixa `ofec-diagnostico.json` com a página e os módulos públicos obtidos pela hospedagem/XAMPP. Essa ferramenta exige login e CSRF, usa os controles de rede do importador e não executa JavaScript nem inclui as credenciais locais. Ela apenas reúne evidências para desenvolver o adaptador; não habilita a importação da OFEC. Erros de acesso externos são incluídos no relatório para diagnóstico.
