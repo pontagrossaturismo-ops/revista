@@ -2,6 +2,7 @@
 if(in_array($_GET['area'] ?? '',['events','routes'],true)) { require __DIR__.'/cms/tourism-admin.php'; return; }
 if(($_GET['area'] ?? '')==='rss') { require __DIR__.'/rss-admin.php'; return; }
 require_once __DIR__.'/cms/metrics.php';
+require_once __DIR__.'/cms/presentation.php';
 require_once __DIR__.'/cms/admin-layout.php';
 require_once __DIR__.'/guia/core.php';
 header('Cache-Control: no-store'); header('X-Frame-Options: DENY');
@@ -22,7 +23,11 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
             $action=$_POST['action'] ?? ''; $id=(int)($_POST['id'] ?? 0); $legacy=(string)($_POST['legacy'] ?? '');
             if($action==='logout') { $_SESSION=[]; session_destroy(); header('Location: admin.php'); exit; }
             if(in_array($action,['save','delete'],true) && !in_array($area,['sections','banners','news','companies'],true)) throw new InvalidArgumentException('Área inválida.');
-            if($action==='delete') {
+            if($action==='save_presentation') {
+                if($area!=='settings') throw new InvalidArgumentException('Área inválida.');
+                cms_save_presentation($_POST,$_FILES['brand_logo_file'] ?? []);
+                $message='Logo e edição atualizadas.'; $success=true;
+            } elseif($action==='delete') {
                 if($area==='news') cms_delete_news($id,(int)$legacy);
                 elseif($area==='companies') cms_delete_company($id,$legacy);
                 else { $table=$area==='sections'?'cms_sections':'cms_banners'; cms_db()->prepare('DELETE FROM '.$table.' WHERE id=?')->execute([$id]); }
@@ -66,7 +71,18 @@ $sections=$db->query('SELECT * FROM cms_sections ORDER BY position,id')->fetchAl
 ?>
 <?php cms_admin_sidebar($area); cms_admin_refresh(); ?>
 <?php if($area==='dashboard'): include __DIR__.'/cms/dashboard.php'; elseif($area==='settings'): ?>
-<h2>Configurações do site</h2><div class="settings-grid"><section class="panel-card"><h3>Identidade e conexão</h3><p>Nome, endereço do site, senha do painel e conexão com os bancos.</p><a href="instalar.php">Abrir configurações</a></section><section class="panel-card"><h3>Feeds e atualização</h3><p>Gerencie fontes, categorias e o histórico de importações. Intervalo automático: 12 horas.</p><a href="admin.php?area=rss">Gerenciar fontes RSS</a><a href="ofec-diagnostico.php">Gerar diagnóstico da OFEC</a></section></div>
+<h2>Configurações do site</h2>
+<?php $presentation=cms_presentation(); ?>
+<form method="post" enctype="multipart/form-data" class="panel-card cms-form">
+<?php admin_hidden('settings',0,'','save_presentation'); ?>
+<h3>Logo oficial e edição atual</h3>
+<p>Envie a logo original para atualizar o cabeçalho e o rodapé, preservando suas proporções.</p>
+<label>Logo oficial (PNG, JPEG ou WebP, até 5 MB)<input type="file" name="brand_logo_file" accept="image/png,image/jpeg,image/webp"></label>
+<img src="<?=rss_escape(cms_brand_logo())?>" alt="Logo atual" class="admin-brand-preview">
+<?php admin_input('edition_label','Nome da edição (opcional)',$presentation['edition_label'] ?? ''); admin_input('edition_url','Link de incorporação da edição atual',$presentation['edition_url'] ?? '','url'); ?>
+<p class="field-help">Cole somente o endereço que aparece em src do iframe fornecido pelo serviço da revista. O serviço deve permitir incorporação. Deixe vazio para usar a edição local existente.</p>
+<button>Salvar logo e edição</button>
+</form><div class="settings-grid"><section class="panel-card"><h3>Identidade e conexão</h3><p>Nome, endereço do site, senha do painel e conexão com os bancos.</p><a href="instalar.php">Abrir configurações</a></section><section class="panel-card"><h3>Feeds e atualização</h3><p>Gerencie fontes, categorias e o histórico de importações. Intervalo automático: 12 horas.</p><a href="admin.php?area=rss">Gerenciar fontes RSS</a><a href="ofec-diagnostico.php">Gerar diagnóstico da OFEC</a></section></div>
 <?php else: $showForm=!$success && (isset($_GET['new']) || $editId || $editLegacy || ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '')==='save')); ?>
 <div class="admin-toolbar"><h2><?=rss_escape($areas[$area])?></h2><a class="admin-add" href="admin.php?area=<?=$area?>&new=1">+ Adicionar item</a></div>
 <?php if($showForm): ?>

@@ -43,6 +43,14 @@ with tempfile.TemporaryDirectory(prefix='revista-cms-http-') as tmp:
             for i in range(1,5): save('news',title=f'Notícia {i}',category='Ponta Grossa',image='https://example.com/photo.png',body=f'Conteúdo exclusivo {i}')
             import base64
             png=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jX1sAAAAASUVORK5CYII=')
+            status,page=req('admin.php',dict(csrf=csrf,area='settings',action='save_presentation',edition_label='Revista 102',edition_url='https://example.com/embed/102'),{'brand_logo_file':('logo.png','image/png',png)})
+            check(status==200 and 'Logo e edição atualizadas.' in page,'Enviar logo original pelo painel')
+            logo=re.search(r'<img src="(media.php\?arquivo=[a-f0-9]+)" alt="Logo atual"',page)[1]
+            home=req('index.php')[1]
+            check(home.count('src="'+logo+'"')==2,'Usar logo enviada no cabeçalho e rodapé')
+            with client.open(base+logo) as response: check(response.read()==png,'Preservar bytes da logo sem recriar a marca')
+            req('admin.php',dict(csrf=csrf,area='settings',action='save_presentation',edition_label='Revista 103',edition_url='https://example.com/embed/103'))
+            check(req('index.php')[1].count('src="'+logo+'"')==2,'Preservar logo ao atualizar somente a edição')
             status,page=req('admin.php',dict(csrf=csrf,area='news',action='save',title='Notícia 5',category='Ponta Grossa',image='',body='Conteúdo exclusivo 5'),{'image_file':('foto.png','image/png',png)})
             check(status==200 and 'Alterações salvas.' in page,'Enviar foto de notícia')
             status,home=req('index.php')

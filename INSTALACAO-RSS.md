@@ -342,3 +342,20 @@ PHP_BIN=php python3 tests/tourism-browser-test.py
 ```
 
 Os testes cobrem validação de datas, encerramento, publicação/rascunhos, edição e exclusão, busca entre tipos, novos campos/filtros de empresa, links sociais, cópia do link, navegação móvel, ordenação da inicial e métricas. A revisão visual foi feita no Chromium em desktop e celular com dados de teste. O conteúdo factual dos roteiros deve ser revisado pelo proprietário conforme mudanças locais; acesso a fontes externas e implantação real no XAMPP continuam dependendo do ambiente do usuário.
+
+### Logo oficial, edição atual e apresentação das matérias
+
+Em **admin.php → Configurações → Logo oficial e edição atual**, envie a logo original
+(PNG, JPEG ou WebP de até 5 MB). O arquivo é preservado sem redesenho e usado no
+cabeçalho e no rodapé. Atualizar a edição sem selecionar outra imagem mantém a logo.
+O envio é salvo no armazenamento privado já configurado para o CMS; mantenha essa
+pasta ao atualizar o site.
+
+Preencha o nome da edição e o **link de incorporação**: somente o endereço do atributo
+`src` do iframe fornecido pela plataforma da revista, sem colar o HTML inteiro.
+O endereço precisa usar HTTP/HTTPS, e a plataforma precisa permitir exibição em iframe.
+Deixar o campo vazio volta à edição local `edicoes/issuu101.html`, quando existente.
+Esses dados são salvos no CMS sem alterar a conexão com o banco nem exigir reinstalação.
+
+As fotos das matérias RSS e manuais têm altura máxima de 500 px e exibem a imagem
+inteira, sem cortes; os títulos são centralizados e têm tamanho adaptável à tela.

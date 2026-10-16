@@ -51,6 +51,17 @@ with tempfile.TemporaryDirectory(prefix='revista-tourism-http-') as tmp:
             req(guest,'metricas.php',{'page':'roteiro.php','slug':'um-dia-em-ponta-grossa'}); req(guest,'metricas.php',{'page':'evento.php','id':1})
             report=req(admin,'admin.php')[1]
             check('Roteiro revisado' in report and 'Acessos a roteiros' in report and 'Acessos a eventos' in report,'Dashboard acompanha roteiros e eventos')
+            settings=dict(csrf=csrf,area='settings',action='save_presentation',edition_label='Edição 102',edition_url='https://example.com/embed/revista?edition=102&view=book')
+            check('Logo e edição atualizadas.' in req(admin,'admin.php',settings)[1],'Salvar edição atual pelo painel')
+            edition_home=req(guest,'index.php')[1]
+            check('src="https://example.com/embed/revista?edition=102&amp;view=book"' in edition_home and 'Edição 102' in edition_home,'Exibir iframe e nome atualizados na inicial')
+            check('Edição 102' in req(admin,'admin.php?area=settings')[1],'Persistir edição no formulário')
+            check(req(admin,'admin.php',dict(settings,csrf='bad'))[0]==403,'Proteger edição contra CSRF')
+            check('Logo e edição atualizadas.' not in req(guest,'admin.php',settings)[1],'Impedir edição anônima')
+            for unsafe in ['javascript:alert(1)','data:text/html,teste','https://user:secret@example.com/embed','<iframe src="https://example.com"></iframe>']:
+                check('Informe somente o link' in req(admin,'admin.php',dict(settings,edition_url=unsafe))[1],'Recusar iframe inseguro: '+unsafe)
+            check('edition=102&amp;view=book' in req(guest,'index.php')[1],'Preservar edição após validação rejeitada')
+            req(admin,'admin.php',dict(settings,edition_url='',edition_label=''))
             home=req(guest,'index.php')[1]
             check('Roteiros para o seu ritmo' in home and 'Festival de teste' in home and 'edition-empty' in home,'Inicial integra roteiros, agenda e alternativa à edição ausente')
             check('<head>' in home and home.count('<head>')==1 and 'assets/brand.svg' in home,'Cabeçalho válido e marca alternativa')

@@ -4,7 +4,7 @@
         <div class="container">
             <div class="footer-columns">
                 <div class="footer-column" align="center">
-                    <img src="<?=is_file(__DIR__.'/img/fav.png')?'img/fav.png':'assets/brand.svg'?>" alt="Revista PG Turismo" class="footer-logo">
+                    <img src="<?=rss_escape(cms_brand_logo())?>" alt="Revista PG Turismo" class="footer-logo">
                    <strong> <p>O melhor conteúdo sobre turismo!</p></strong>
                    
                 </div>
