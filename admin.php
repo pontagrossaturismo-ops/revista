@@ -37,6 +37,7 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
         } catch(Throwable $e) { error_log('Admin CMS: '.$e->getMessage()); $message=$e instanceof InvalidArgumentException ? $e->getMessage() : 'Não foi possível salvar. Confira campos duplicados e permissões do armazenamento.'; }
     } else { http_response_code(403); $message='Faça login para continuar.'; }
 }
+if(!empty($_SESSION['rss_admin'])) cms_db();
 function admin_hidden($area,$id=0,$legacy='',$action='save') { ?>
 <input type="hidden" name="csrf" value="<?=rss_escape($_SESSION['csrf'])?>"><input type="hidden" name="area" value="<?=rss_escape($area)?>"><input type="hidden" name="action" value="<?=rss_escape($action)?>"><input type="hidden" name="id" value="<?=(int)$id?>"><input type="hidden" name="legacy" value="<?=rss_escape($legacy)?>">
 <?php }

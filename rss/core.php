@@ -1,6 +1,7 @@
 <?php
 require_once dirname(__DIR__).'/config/runtime.php';
 require_once __DIR__.'/ofec.php';
+require_once __DIR__.'/storage.php';
 // PHP 8.1+, PDO SQLite, cURL, SimpleXML e mbstring não é necessário.
 function rss_escape($s) { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 function rss_categories() { return function_exists('cms_categories') ? cms_categories() : ['ponta-grossa','viagem','lazer','gastronomia','eventos','esporte','noticias']; }
@@ -16,25 +17,39 @@ function rss_status() {
 }
 function rss_db() {
     static $db;
-    if ($db) return $db;
-    $dir = rss_data_dir();
-    if (!is_dir($dir) && !mkdir($dir, 0700, true)) throw new RuntimeException('Não foi possível criar o diretório RSS.');
-    $db = new PDO('sqlite:' . $dir . '/rss.sqlite', null, null, [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
-    $db->exec('PRAGMA busy_timeout=10000; PRAGMA foreign_keys=ON');
-    $db->exec("CREATE TABLE IF NOT EXISTS content_order(seq INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,item_key TEXT NOT NULL,registered_at TEXT NOT NULL,UNIQUE(kind,item_key))");
-    $db->exec('CREATE TABLE IF NOT EXISTS sources (id INTEGER PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL UNIQUE, category TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, checked_at TEXT, error TEXT)');
-    $db->exec('CREATE TABLE IF NOT EXISTS articles (id INTEGER PRIMARY KEY, source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE, identity TEXT NOT NULL, title TEXT NOT NULL, url TEXT NOT NULL, summary TEXT NOT NULL, image TEXT NOT NULL, published_at TEXT NOT NULL, UNIQUE(source_id, identity))');
-    $sourceColumns=array_column($db->query('PRAGMA table_info(sources)')->fetchAll(PDO::FETCH_ASSOC),'name');
-    if(!in_array('type',$sourceColumns,true)) $db->exec("ALTER TABLE sources ADD COLUMN type TEXT NOT NULL DEFAULT 'rss'");
-    $columns=array_column($db->query('PRAGMA table_info(articles)')->fetchAll(PDO::FETCH_ASSOC),'name');
-    foreach (['body','image_file','image_error','credit'] as $column) if (!in_array($column,$columns,true)) $db->exec('ALTER TABLE articles ADD COLUMN '.$column." TEXT NOT NULL DEFAULT ''");
-    $db->exec('CREATE TABLE IF NOT EXISTS import_runs (id INTEGER PRIMARY KEY,source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,source_url TEXT NOT NULL,finished_at TEXT NOT NULL,status TEXT NOT NULL,processed INTEGER NOT NULL DEFAULT 0,created INTEGER NOT NULL DEFAULT 0,existing INTEGER NOT NULL DEFAULT 0,image_errors INTEGER NOT NULL DEFAULT 0,error TEXT)');
-    $runColumns=array_column($db->query('PRAGMA table_info(import_runs)')->fetchAll(PDO::FETCH_ASSOC),'name');
-    if(!in_array('content_errors',$runColumns,true)) $db->exec('ALTER TABLE import_runs ADD COLUMN content_errors INTEGER NOT NULL DEFAULT 0');
-    $db->exec("INSERT OR IGNORE INTO content_order(kind,item_key,registered_at) SELECT 'rss',CAST(id AS TEXT),published_at FROM articles ORDER BY id;
-    CREATE TRIGGER IF NOT EXISTS articles_order_cleanup AFTER DELETE ON articles BEGIN DELETE FROM content_order WHERE kind='rss' AND item_key=CAST(OLD.id AS TEXT); END");
-    return $db;
+    if($db) return $db;
+    $dir=rss_data_dir();
+    if(!is_dir($dir) && !@mkdir($dir,0700,true) && !is_dir($dir)) throw new RuntimeException('Não foi possível criar o diretório RSS.');
+    try {
+        $connection=new PDO('sqlite:'.$dir.'/rss.sqlite',null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
+        $connection->exec('PRAGMA busy_timeout=10000; PRAGMA foreign_keys=ON');
+        if((int)$connection->query('PRAGMA user_version')->fetchColumn()<1) rss_schema_lock(function() use ($connection) {
+            if((int)$connection->query('PRAGMA user_version')->fetchColumn()>=1) return;
+            // WAL permite ler o painel enquanto outra conexão grava a importação.
+            $mode=$connection->query('PRAGMA journal_mode=WAL')->fetchColumn();
+            if(strtolower($mode)!=='wal') throw new RuntimeException('O armazenamento precisa suportar o modo WAL do SQLite.');
+            $connection->beginTransaction();
+            try {
+                $connection->exec("CREATE TABLE IF NOT EXISTS content_order(seq INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,item_key TEXT NOT NULL,registered_at TEXT NOT NULL,UNIQUE(kind,item_key))");
+                $connection->exec('CREATE TABLE IF NOT EXISTS sources (id INTEGER PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL UNIQUE, category TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, checked_at TEXT, error TEXT)');
+                $connection->exec('CREATE TABLE IF NOT EXISTS articles (id INTEGER PRIMARY KEY, source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE, identity TEXT NOT NULL, title TEXT NOT NULL, url TEXT NOT NULL, summary TEXT NOT NULL, image TEXT NOT NULL, published_at TEXT NOT NULL, UNIQUE(source_id, identity))');
+                $sourceColumns=array_column($connection->query('PRAGMA table_info(sources)')->fetchAll(PDO::FETCH_ASSOC),'name');
+                if(!in_array('type',$sourceColumns,true)) $connection->exec("ALTER TABLE sources ADD COLUMN type TEXT NOT NULL DEFAULT 'rss'");
+                $columns=array_column($connection->query('PRAGMA table_info(articles)')->fetchAll(PDO::FETCH_ASSOC),'name');
+                foreach (['body','image_file','image_error','credit'] as $column) if (!in_array($column,$columns,true)) $connection->exec('ALTER TABLE articles ADD COLUMN '.$column." TEXT NOT NULL DEFAULT ''");
+                $connection->exec('CREATE TABLE IF NOT EXISTS import_runs (id INTEGER PRIMARY KEY,source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,source_url TEXT NOT NULL,finished_at TEXT NOT NULL,status TEXT NOT NULL,processed INTEGER NOT NULL DEFAULT 0,created INTEGER NOT NULL DEFAULT 0,existing INTEGER NOT NULL DEFAULT 0,image_errors INTEGER NOT NULL DEFAULT 0,error TEXT)');
+                $runColumns=array_column($connection->query('PRAGMA table_info(import_runs)')->fetchAll(PDO::FETCH_ASSOC),'name');
+                if(!in_array('content_errors',$runColumns,true)) $connection->exec('ALTER TABLE import_runs ADD COLUMN content_errors INTEGER NOT NULL DEFAULT 0');
+                $connection->exec("INSERT OR IGNORE INTO content_order(kind,item_key,registered_at) SELECT 'rss',CAST(id AS TEXT),published_at FROM articles ORDER BY id;
+                CREATE TRIGGER IF NOT EXISTS articles_order_cleanup AFTER DELETE ON articles BEGIN DELETE FROM content_order WHERE kind='rss' AND item_key=CAST(OLD.id AS TEXT); END");
+                $connection->exec('PRAGMA user_version=1');
+                $connection->commit();
+            } catch(Throwable $e) { if($connection->inTransaction()) $connection->rollBack(); throw $e; }
+        });
+        $db=$connection; return $db;
+    } catch(PDOException $e) { if(rss_storage_is_busy($e)) rss_storage_unavailable($e); throw $e; }
 }
+
 function rss_url($url) {
     $p = parse_url(trim($url));
     if (!$p || !in_array(strtolower($p['scheme'] ?? ''), ['http','https'], true) || empty($p['host']) || isset($p['user']) || isset($p['pass']) || (isset($p['port']) && !in_array($p['port'], [80,443], true))) throw new InvalidArgumentException('Use uma URL pública HTTP ou HTTPS, sem autenticação.');
@@ -187,7 +202,7 @@ function rss_image_info($bytes) {
 }
 function rss_cache_image($url,?callable $fetcher=null) {
     $dir=rss_data_dir().'/images';
-    if (!is_dir($dir) && !mkdir($dir,0700,true)) throw new RuntimeException('Sem permissão para salvar imagens.');
+    if (!is_dir($dir) && !@mkdir($dir,0700,true)) throw new RuntimeException('Sem permissão para salvar imagens.');
     $key=hash('sha256',$url); $file=$dir.'/'.$key;
     if (is_file($file)) {
         try { if (filesize($file)>5*1024*1024) throw new RuntimeException('Cache excede o limite.'); rss_image_info(file_get_contents($file)); return $key; }

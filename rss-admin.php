@@ -28,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         } catch(Throwable $e) { error_log('RSS painel: '.$e->getMessage()); $message='Não foi possível salvar. '.($e instanceof InvalidArgumentException ? $e->getMessage() : 'Verifique se a URL já está cadastrada e se o armazenamento permite escrita.'); }
     } else { http_response_code(403); $message='Faça login.'; }
 }
+if(!empty($_SESSION['rss_admin'])) rss_db();
 function csrf_field() { echo '<input type="hidden" name="csrf" value="'.rss_escape($_SESSION['csrf']).'">'; }
 function source_fields($source=[]) { ?>
 <input type="hidden" name="action" value="save"><input type="hidden" name="id" value="<?=(int)($source['id'] ?? 0)?>">

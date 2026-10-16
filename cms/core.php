@@ -2,42 +2,52 @@
 require_once dirname(__DIR__).'/rss/core.php';
 function cms_db() {
     $db=rss_db(); static $ready=false; if($ready) return $db;
-    $db->exec("CREATE TABLE IF NOT EXISTS content_order(seq INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,item_key TEXT NOT NULL,registered_at TEXT NOT NULL,UNIQUE(kind,item_key));
-    CREATE TABLE IF NOT EXISTS cms_sections(id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,category TEXT NOT NULL,color TEXT NOT NULL,position INTEGER NOT NULL,active INTEGER NOT NULL DEFAULT 1);
-    CREATE TABLE IF NOT EXISTS cms_banners(id INTEGER PRIMARY KEY AUTOINCREMENT,section_id INTEGER REFERENCES cms_sections(id) ON DELETE SET NULL,title TEXT NOT NULL,image TEXT NOT NULL,link TEXT NOT NULL DEFAULT '',active INTEGER NOT NULL DEFAULT 0,show_home INTEGER NOT NULL DEFAULT 1,show_rss INTEGER NOT NULL DEFAULT 0,show_manual INTEGER NOT NULL DEFAULT 0);
-    CREATE TABLE IF NOT EXISTS cms_news(id INTEGER PRIMARY KEY AUTOINCREMENT,legacy_id INTEGER UNIQUE,title TEXT NOT NULL,category TEXT NOT NULL,image TEXT NOT NULL,body TEXT NOT NULL,created_at TEXT NOT NULL,deleted INTEGER NOT NULL DEFAULT 0);
-    CREATE TABLE IF NOT EXISTS cms_companies(id INTEGER PRIMARY KEY AUTOINCREMENT,legacy_slug TEXT UNIQUE,slug TEXT NOT NULL UNIQUE,data TEXT NOT NULL,deleted INTEGER NOT NULL DEFAULT 0);
-    CREATE TABLE IF NOT EXISTS company_views(company_key TEXT PRIMARY KEY,total INTEGER NOT NULL DEFAULT 0);
-    CREATE TABLE IF NOT EXISTS cms_media(hash TEXT PRIMARY KEY,mime TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS cms_meta(name TEXT PRIMARY KEY,value TEXT NOT NULL)");
-    $bannerColumns=$db->query('PRAGMA table_info(cms_banners)')->fetchAll(PDO::FETCH_ASSOC);
-    foreach($bannerColumns as $column) if($column['name']==='section_id' && $column['notnull']) {
-        $db->beginTransaction();
-        try {
-            $db->exec("CREATE TABLE cms_banners_new(id INTEGER PRIMARY KEY AUTOINCREMENT,section_id INTEGER REFERENCES cms_sections(id) ON DELETE SET NULL,title TEXT NOT NULL,image TEXT NOT NULL,link TEXT NOT NULL DEFAULT '',active INTEGER NOT NULL DEFAULT 0,show_home INTEGER NOT NULL DEFAULT 1,show_rss INTEGER NOT NULL DEFAULT 0,show_manual INTEGER NOT NULL DEFAULT 0);
-            INSERT INTO cms_banners_new(id,section_id,title,image,link,active) SELECT id,section_id,title,image,link,active FROM cms_banners;
-            DROP TABLE cms_banners; ALTER TABLE cms_banners_new RENAME TO cms_banners"); $db->commit();
-        } catch(Throwable $e) { $db->rollBack(); throw $e; }
-        break;
-    }
-    $db->exec("CREATE TRIGGER IF NOT EXISTS section_banner_cleanup AFTER DELETE ON cms_sections BEGIN
-        UPDATE cms_banners SET show_home=0 WHERE section_id IS NULL;
-        DELETE FROM cms_banners WHERE section_id IS NULL AND show_home=0 AND show_rss=0 AND show_manual=0;
-    END");
-    $newsColumns=array_column($db->query('PRAGMA table_info(cms_news)')->fetchAll(PDO::FETCH_ASSOC),'name');
-    if(!in_array('credit',$newsColumns,true)) $db->exec("ALTER TABLE cms_news ADD COLUMN credit TEXT NOT NULL DEFAULT ''");
-    if(!$db->query("SELECT 1 FROM cms_meta WHERE name='sections_seeded'")->fetchColumn()) {
-        $db->beginTransaction();
-        try {
-            if(!$db->query("SELECT 1 FROM cms_meta WHERE name='sections_seeded'")->fetchColumn()) {
-                $stmt=$db->prepare('INSERT INTO cms_sections(title,category,color,position) VALUES(?,?,?,?)');
-                foreach(['Ponta Grossa'=>'ponta-grossa','Viagem'=>'viagem','Lazer'=>'lazer','Gastronomia'=>'gastronomia','Esporte'=>'esporte'] as $title=>$category) $stmt->execute([$title,$category,'#ad1431',($position=($position ?? 0)+1)]);
-                $db->exec("INSERT INTO cms_meta VALUES('sections_seeded','1')");
-            }
-            $db->commit();
-        } catch(Throwable $e) { $db->rollBack(); throw $e; }
-    }
+    if(cms_schema_ready($db)) { $ready=true; return $db; }
+    rss_schema_lock(function() use ($db) {
+        if(cms_schema_ready($db)) return;
+        $db->exec("CREATE TABLE IF NOT EXISTS content_order(seq INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,item_key TEXT NOT NULL,registered_at TEXT NOT NULL,UNIQUE(kind,item_key));
+        CREATE TABLE IF NOT EXISTS cms_sections(id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,category TEXT NOT NULL,color TEXT NOT NULL,position INTEGER NOT NULL,active INTEGER NOT NULL DEFAULT 1);
+        CREATE TABLE IF NOT EXISTS cms_banners(id INTEGER PRIMARY KEY AUTOINCREMENT,section_id INTEGER REFERENCES cms_sections(id) ON DELETE SET NULL,title TEXT NOT NULL,image TEXT NOT NULL,link TEXT NOT NULL DEFAULT '',active INTEGER NOT NULL DEFAULT 0,show_home INTEGER NOT NULL DEFAULT 1,show_rss INTEGER NOT NULL DEFAULT 0,show_manual INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS cms_news(id INTEGER PRIMARY KEY AUTOINCREMENT,legacy_id INTEGER UNIQUE,title TEXT NOT NULL,category TEXT NOT NULL,image TEXT NOT NULL,body TEXT NOT NULL,created_at TEXT NOT NULL,deleted INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS cms_companies(id INTEGER PRIMARY KEY AUTOINCREMENT,legacy_slug TEXT UNIQUE,slug TEXT NOT NULL UNIQUE,data TEXT NOT NULL,deleted INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS company_views(company_key TEXT PRIMARY KEY,total INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS cms_media(hash TEXT PRIMARY KEY,mime TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS cms_meta(name TEXT PRIMARY KEY,value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS daily_metrics(day TEXT NOT NULL,kind TEXT NOT NULL,item TEXT NOT NULL,total INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(day,kind,item))");
+        $bannerColumns=$db->query('PRAGMA table_info(cms_banners)')->fetchAll(PDO::FETCH_ASSOC);
+        foreach($bannerColumns as $column) if($column['name']==='section_id' && $column['notnull']) {
+            $db->beginTransaction();
+            try {
+                $db->exec("CREATE TABLE cms_banners_new(id INTEGER PRIMARY KEY AUTOINCREMENT,section_id INTEGER REFERENCES cms_sections(id) ON DELETE SET NULL,title TEXT NOT NULL,image TEXT NOT NULL,link TEXT NOT NULL DEFAULT '',active INTEGER NOT NULL DEFAULT 0,show_home INTEGER NOT NULL DEFAULT 1,show_rss INTEGER NOT NULL DEFAULT 0,show_manual INTEGER NOT NULL DEFAULT 0);
+                INSERT INTO cms_banners_new(id,section_id,title,image,link,active) SELECT id,section_id,title,image,link,active FROM cms_banners;
+                DROP TABLE cms_banners; ALTER TABLE cms_banners_new RENAME TO cms_banners"); $db->commit();
+            } catch(Throwable $e) { $db->rollBack(); throw $e; }
+            break;
+        }
+        $db->exec("CREATE TRIGGER IF NOT EXISTS section_banner_cleanup AFTER DELETE ON cms_sections BEGIN
+            UPDATE cms_banners SET show_home=0 WHERE section_id IS NULL;
+            DELETE FROM cms_banners WHERE section_id IS NULL AND show_home=0 AND show_rss=0 AND show_manual=0;
+        END");
+        $newsColumns=array_column($db->query('PRAGMA table_info(cms_news)')->fetchAll(PDO::FETCH_ASSOC),'name');
+        if(!in_array('credit',$newsColumns,true)) $db->exec("ALTER TABLE cms_news ADD COLUMN credit TEXT NOT NULL DEFAULT ''");
+        if(!$db->query("SELECT 1 FROM cms_meta WHERE name='sections_seeded'")->fetchColumn()) {
+            $db->beginTransaction();
+            try {
+                if(!$db->query("SELECT 1 FROM cms_meta WHERE name='sections_seeded'")->fetchColumn()) {
+                    $stmt=$db->prepare('INSERT INTO cms_sections(title,category,color,position) VALUES(?,?,?,?)');
+                    foreach(['Ponta Grossa'=>'ponta-grossa','Viagem'=>'viagem','Lazer'=>'lazer','Gastronomia'=>'gastronomia','Esporte'=>'esporte'] as $title=>$category) $stmt->execute([$title,$category,'#ad1431',($position=($position ?? 0)+1)]);
+                    $db->exec("INSERT INTO cms_meta VALUES('sections_seeded','1')");
+                }
+                $db->commit();
+            } catch(Throwable $e) { $db->rollBack(); throw $e; }
+        }
+        $db->exec("INSERT INTO cms_meta(name,value) VALUES('schema_version','2') ON CONFLICT(name) DO UPDATE SET value='2'");
+    });
     $ready=true; return $db;
+}
+function cms_schema_ready($db) {
+    if(!$db->query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cms_meta'")->fetchColumn()) return false;
+    return $db->query("SELECT value FROM cms_meta WHERE name='schema_version'")->fetchColumn()==='2';
 }
 function cms_category($text) {
     $text=trim($text); $text=strtr(strtolower($text),['á'=>'a','ã'=>'a','â'=>'a','é'=>'e','ê'=>'e','í'=>'i','ó'=>'o','ô'=>'o','õ'=>'o','ú'=>'u','ç'=>'c','Á'=>'a','Ã'=>'a','É'=>'e','Í'=>'i','Ó'=>'o','Ú'=>'u','Ç'=>'c']);
@@ -67,9 +77,13 @@ function cms_upload($file) {
     return 'media.php?arquivo='.$hash;
 }
 function cms_register($kind,$key,$date=null) {
-    $db=cms_db(); $db->prepare('INSERT OR IGNORE INTO content_order(kind,item_key,registered_at) VALUES(?,?,?)')->execute([$kind,(string)$key,$date ?: gmdate('Y-m-d H:i:s')]);
-    $stmt=$db->prepare('SELECT seq,registered_at FROM content_order WHERE kind=? AND item_key=?'); $stmt->execute([$kind,(string)$key]); return $stmt->fetch(PDO::FETCH_ASSOC);
+    $db=cms_db(); $stmt=$db->prepare('SELECT seq,registered_at FROM content_order WHERE kind=? AND item_key=?');
+    $stmt->execute([$kind,(string)$key]); $existing=$stmt->fetch(PDO::FETCH_ASSOC); $stmt->closeCursor();
+    if($existing) return $existing;
+    $db->prepare('INSERT OR IGNORE INTO content_order(kind,item_key,registered_at) VALUES(?,?,?)')->execute([$kind,(string)$key,$date ?: gmdate('Y-m-d H:i:s')]);
+    $stmt->execute([$kind,(string)$key]); return $stmt->fetch(PDO::FETCH_ASSOC);
 }
+
 function cms_legacy_news($id=null) {
     static $cache=[]; $key=$id===null?'all':(string)$id;
     if(isset($cache[$key])) return $cache[$key];
@@ -105,7 +119,7 @@ function cms_news_entries($category=null,$legacyRows=null) {
         $order=cms_register('sql',$row['id'],$date ?: ($legacySeeded?gmdate('Y-m-d H:i:s'):'1970-01-01 00:00:00'));
         $entries[]=['kind'=>'sql','id'=>$row['id'],'key'=>'sql:'.$row['id'],'title'=>$row['titulo'],'category'=>cms_category($row['categoria'] ?? 'noticias'),'image'=>cms_legacy_photo($row['foto1'] ?? ''),'body'=>rss_body_text($row['conteudo'] ?? ''),'href'=>'materia.php?id='.(int)$row['id'],'order'=>$order]+cms_legacy_metadata($row);
     }
-    if($legacyNews) $db->exec("INSERT OR IGNORE INTO cms_meta(name,value) VALUES('legacy_news_seeded','1')");
+    if($legacyNews && !$legacySeeded) $db->exec("INSERT OR IGNORE INTO cms_meta(name,value) VALUES('legacy_news_seeded','1')");
     foreach(rss_public_articles(null,null) as $row) {
         $order=cms_register('rss',$row['id'],$row['published_at']);
         $entries[]=['kind'=>'rss','id'=>$row['id'],'key'=>'rss:'.$row['id'],'title'=>$row['title'],'category'=>cms_category($row['category']),'image'=>rss_image_src($row),'body'=>$row['body'],'href'=>'rss-materia.php?id='.(int)$row['id'],'order'=>$order];

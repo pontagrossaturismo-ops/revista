@@ -1,10 +1,7 @@
 <?php
 require_once __DIR__.'/core.php';
-function cms_metrics_db() {
-    $db=cms_db();
-    $db->exec("CREATE TABLE IF NOT EXISTS daily_metrics(day TEXT NOT NULL,kind TEXT NOT NULL,item TEXT NOT NULL,total INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(day,kind,item))");
-    return $db;
-}
+function cms_metrics_db() { return cms_db(); }
+
 function cms_metric($kind,$item) {
     $key=$kind.':'.$item;
     if(time()-(int)($_SESSION['metrics'][$key] ?? 0)<1800) return;
