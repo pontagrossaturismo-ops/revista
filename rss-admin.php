@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/cms/core.php';
+require_once __DIR__.'/cms/admin-layout.php';
 header('Cache-Control: no-store'); header('X-Frame-Options: DENY');
 session_set_cookie_params(['httponly'=>true,'secure'=>!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off','samesite'=>'Strict']); session_start();
 $password=revista_setting('RSS_ADMIN_PASSWORD_HASH');
@@ -39,8 +40,8 @@ function source_fields($source=[]) { ?>
 <button>Salvar <?=$source?'alterações':'fonte'?></button>
 <?php }
 ?>
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Painel RSS — Revista PG Turismo</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="rss-admin.css"></head><body><main class="rss-panel">
-<header class="panel-heading"><div><p class="eyebrow">Revista PG Turismo</p><h1>Fontes RSS</h1><p>Gerencie suas fontes e acompanhe cada importação.</p></div><a href="instalar.php">Configurar site</a></header>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Painel RSS — Revista PG Turismo</title><link rel="stylesheet" href="rss-admin.css"><link rel="stylesheet" href="cms/site.css"><link rel="stylesheet" href="cms/admin.css"><script src="cms/admin.js" defer></script></head><body class="<?=empty($_SESSION['rss_admin'])?'login-shell':'admin-shell'?>"><main class="rss-panel">
+<header class="panel-heading"><div><p class="eyebrow">Revista PG Turismo</p><h1>Fontes RSS</h1><p>Gerencie suas fontes e acompanhe cada importação.</p></div><a href="admin.php?area=settings">Configurar site</a></header>
 <?php if($message): ?><p class="notice" role="status"><?=rss_escape($message)?></p><?php endif; ?>
 <?php if(empty($_SESSION['rss_admin'])): ?>
 <form method="post" class="panel-card login-form"><?php csrf_field(); ?><label>Senha<input type="password" name="password" required autocomplete="current-password"></label><button>Entrar</button></form>
@@ -49,6 +50,7 @@ $db=rss_db(); $status=rss_status();
 $totals=$db->query("SELECT count(*) AS attempts,coalesce(sum(status='error'),0) AS errors,coalesce(sum(status='partial'),0) AS partial,coalesce(sum(created),0) AS created,coalesce(sum(image_errors),0) AS image_errors FROM import_runs")->fetch(PDO::FETCH_ASSOC);
 $sources=$db->query("SELECT s.*,count(r.id) AS attempts,coalesce(sum(r.status='error'),0) AS errors,coalesce(sum(r.status='partial'),0) AS partial,coalesce(sum(r.image_errors>0),0) AS image_failures,coalesce(sum(r.content_errors),0) AS content_errors FROM sources s LEFT JOIN import_runs r ON r.source_id=s.id GROUP BY s.id ORDER BY s.name")->fetchAll(PDO::FETCH_ASSOC);
 ?>
+<?php cms_admin_sidebar('rss'); cms_admin_refresh(); ?>
 <section class="panel-stats" aria-label="Resumo"><div class="panel-card"><strong><?=(int)$status['articles']?></strong><span>notícias armazenadas</span></div><div class="panel-card"><strong><?=(int)$status['visible']?></strong><span>visíveis com foto local</span></div><div class="panel-card"><strong><?=(int)$totals['attempts']?></strong><span>tentativas de importação</span></div><div class="panel-card"><strong><?=(int)$totals['errors']?></strong><span>falhas de feed</span></div><div class="panel-card"><strong><?=(int)$totals['image_errors']?></strong><span>falhas de imagem</span></div></section>
 <p class="sr-summary"><?=(int)$status['articles']?> notícias armazenadas · <?=(int)$status['visible']?> visíveis</p>
 <nav class="panel-links"><a href="admin.php">Administrar site, notícias e empresas</a><a href="noticias.php#noticias-rss">Ver notícias RSS</a><a href="feed.php" target="_blank" rel="noopener">Ver XML</a><a href="#historico">Histórico de importações</a></nav>
@@ -69,7 +71,7 @@ foreach($items as $article) { $stored++; if(rss_has_image($article)) $photos++; 
 <form method="post" class="source-actions"><?php csrf_field(); ?><input type="hidden" name="id" value="<?=(int)$source['id']?>"><button name="action" value="toggle" class="secondary"><?=$source['active']?'Pausar':'Ativar'?></button><button name="action" value="delete" class="danger" onclick="return confirm('Excluir fonte, notícias e histórico?')">Excluir</button></form>
 </article><?php endforeach; ?></section>
 <section id="historico" class="panel-card"><h2>Histórico de importações</h2><p>Resultados por fonte, em UTC. Exibindo as 100 execuções mais recentes. “Existentes” são itens reprocessados, não novos cadastros.</p>
-<form method="get" class="history-filter"><label>Fonte<select name="source"><option value="0">Todas</option><?php foreach($sources as $source): ?><option value="<?=(int)$source['id']?>" <?=(int)($_GET['source'] ?? 0)===(int)$source['id']?'selected':''?>><?=rss_escape($source['name'])?></option><?php endforeach; ?></select></label><button>Filtrar</button></form>
+<form method="get" action="admin.php" class="history-filter"><input type="hidden" name="area" value="rss"><label>Fonte<select name="source"><option value="0">Todas</option><?php foreach($sources as $source): ?><option value="<?=(int)$source['id']?>" <?=(int)($_GET['source'] ?? 0)===(int)$source['id']?'selected':''?>><?=rss_escape($source['name'])?></option><?php endforeach; ?></select></label><button>Filtrar</button></form>
 <?php $filter=(int)($_GET['source'] ?? 0); $query='SELECT r.*,s.name FROM import_runs r JOIN sources s ON s.id=r.source_id'; $args=[]; if($filter) { $query.=' WHERE r.source_id=?'; $args[]=$filter; } $runs=$db->prepare($query.' ORDER BY r.id DESC LIMIT 100'); $runs->execute($args); $history=$runs->fetchAll(PDO::FETCH_ASSOC); ?>
 <?php if(!$history): ?><p>Nenhuma importação registrada ainda. Execute o importador ou aguarde o agendamento.</p><?php else: ?><div class="table-scroll"><table><thead><tr><th>Data / fonte</th><th>Resultado</th><th>Processados</th><th>Novos</th><th>Existentes</th><th>Erros de imagem</th><th>Erros de conteúdo</th></tr></thead><tbody>
 <?php foreach($history as $run): ?><tr><td><?=rss_escape($run['finished_at'])?><br><strong><?=rss_escape($run['name'])?></strong><details><summary>Link utilizado</summary><?=rss_escape($run['source_url'])?></details></td><td><?=rss_escape(['success'=>'Sucesso','partial'=>'Parcial','error'=>'Erro de feed'][$run['status']] ?? $run['status'])?><?php if($run['error']): ?><br><span class="error-message"><?=rss_escape($run['error'])?></span><?php endif; ?></td><td><?=(int)$run['processed']?></td><td><?=(int)$run['created']?></td><td><?=(int)$run['existing']?></td><td><?=(int)$run['image_errors']?></td><td><?=(int)$run['content_errors']?></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?></section>

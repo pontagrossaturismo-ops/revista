@@ -238,7 +238,7 @@ function rss_image_src($article) {
     return !empty($article['image_file']) ? 'rss-imagem.php?id='.(int)$article['id'] : $article['image'];
 }
 function rss_store($db,$source,$items) {
-    $stmt=$db->prepare('INSERT INTO articles(source_id,identity,title,url,summary,image,published_at,body,image_file,image_error,credit) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(source_id,identity) DO UPDATE SET title=excluded.title,url=excluded.url,summary=excluded.summary,image=excluded.image,body=excluded.body,image_file=CASE WHEN excluded.image_file=\'\' AND articles.image=excluded.image THEN articles.image_file ELSE excluded.image_file END,image_error=excluded.image_error,credit=excluded.credit');
+    $stmt=$db->prepare('INSERT INTO articles(source_id,identity,title,url,summary,image,published_at,body,image_file,image_error,credit) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(source_id,identity) DO UPDATE SET title=excluded.title,url=excluded.url,summary=excluded.summary,image=excluded.image,body=excluded.body,published_at=excluded.published_at,image_file=CASE WHEN excluded.image_file=\'\' AND articles.image=excluded.image THEN articles.image_file ELSE excluded.image_file END,image_error=excluded.image_error,credit=excluded.credit');
     $db->beginTransaction();
     try {
         $lookup=$db->prepare('SELECT id FROM articles WHERE source_id=? AND identity=?');
@@ -344,7 +344,7 @@ function rss_has_image($article) {
     return $info && in_array($info['mime'] ?? '',['image/jpeg','image/png','image/gif','image/webp'],true) && $info[0]*$info[1]<=40000000;
 }
 function rss_public_articles($category=null,$limit=54) {
-    $sql="SELECT a.*,s.name,s.category FROM articles a JOIN sources s ON s.id=a.source_id WHERE s.active=1 AND a.image_file<>''";
+    $sql="SELECT a.*,s.name,s.category,s.type AS source_type,s.url AS source_url FROM articles a JOIN sources s ON s.id=a.source_id WHERE s.active=1 AND a.image_file<>''";
     $params=[]; if ($category) { $sql.=' AND s.category=?'; $params[]=$category; }
     $stmt=rss_db()->prepare($sql.' ORDER BY a.published_at DESC,a.id DESC'); $stmt->execute($params);
     $rows=[];

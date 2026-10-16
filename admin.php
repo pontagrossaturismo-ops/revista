@@ -1,5 +1,7 @@
 <?php
+if(($_GET['area'] ?? '')==='rss') { require __DIR__.'/rss-admin.php'; return; }
 require_once __DIR__.'/cms/metrics.php';
+require_once __DIR__.'/cms/admin-layout.php';
 require_once __DIR__.'/guia/core.php';
 header('Cache-Control: no-store'); header('X-Frame-Options: DENY');
 session_set_cookie_params(['httponly'=>true,'secure'=>!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off','samesite'=>'Strict']); session_start();
@@ -61,10 +63,9 @@ if(!$success) {
 }
 $sections=$db->query('SELECT * FROM cms_sections ORDER BY position,id')->fetchAll(PDO::FETCH_ASSOC);
 ?>
-<aside class="admin-sidebar"><div class="admin-brand">Revista PG<small>PAINEL ADMINISTRATIVO</small></div><nav class="admin-nav"><?php foreach($areas as $key=>$label): ?><a class="<?=$area===$key?'active':''?>" href="admin.php?area=<?=$key?>"><?=rss_escape($label)?></a><?php endforeach; ?><p class="sidebar-label">Distribuição</p><a href="rss-admin.php">Fontes RSS</a></nav><div class="sidebar-bottom"><a href="index.php">↗ Abrir o site</a></div></aside>
-<section class="rss-refresh-box"><button type="button" id="refresh-rss" data-csrf="<?=rss_escape($_SESSION['csrf'])?>">↻ Atualizar RSS agora</button><p>Atualização automática a cada 12 horas. O botão permite antecipar a próxima importação.</p><?php $lastRun=rss_data_dir().'/last-import'; if(is_file($lastRun)): ?><p>Último início: <?=rss_escape(cms_date(gmdate('Y-m-d H:i:s',filemtime($lastRun)),'d/m/Y H:i'))?> · horário de Brasília</p><?php endif; ?><div id="refresh-status" role="status" aria-live="polite"></div></section>
+<?php cms_admin_sidebar($area); cms_admin_refresh(); ?>
 <?php if($area==='dashboard'): include __DIR__.'/cms/dashboard.php'; elseif($area==='settings'): ?>
-<h2>Configurações do site</h2><div class="settings-grid"><section class="panel-card"><h3>Identidade e conexão</h3><p>Nome, endereço do site, senha do painel e conexão com os bancos.</p><a href="instalar.php">Abrir configurações</a></section><section class="panel-card"><h3>Feeds e atualização</h3><p>Gerencie fontes, categorias e o histórico de importações. Intervalo automático: 12 horas.</p><a href="rss-admin.php">Gerenciar fontes RSS</a><a href="ofec-diagnostico.php">Gerar diagnóstico da OFEC</a></section></div>
+<h2>Configurações do site</h2><div class="settings-grid"><section class="panel-card"><h3>Identidade e conexão</h3><p>Nome, endereço do site, senha do painel e conexão com os bancos.</p><a href="instalar.php">Abrir configurações</a></section><section class="panel-card"><h3>Feeds e atualização</h3><p>Gerencie fontes, categorias e o histórico de importações. Intervalo automático: 12 horas.</p><a href="admin.php?area=rss">Gerenciar fontes RSS</a><a href="ofec-diagnostico.php">Gerar diagnóstico da OFEC</a></section></div>
 <?php else: $showForm=!$success && (isset($_GET['new']) || $editId || $editLegacy || ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '')==='save')); ?>
 <div class="admin-toolbar"><h2><?=rss_escape($areas[$area])?></h2><a class="admin-add" href="admin.php?area=<?=$area?>&new=1">+ Adicionar item</a></div>
 <?php if($showForm): ?>

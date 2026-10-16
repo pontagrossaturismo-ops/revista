@@ -122,10 +122,10 @@ function cms_news_entries($category=null,$legacyRows=null) {
     if($legacyNews && !$legacySeeded) $db->exec("INSERT OR IGNORE INTO cms_meta(name,value) VALUES('legacy_news_seeded','1')");
     foreach(rss_public_articles(null,null) as $row) {
         $order=cms_register('rss',$row['id'],$row['published_at']);
-        $entries[]=['kind'=>'rss','id'=>$row['id'],'key'=>'rss:'.$row['id'],'title'=>$row['title'],'category'=>cms_category($row['category']),'image'=>rss_image_src($row),'body'=>$row['body'],'href'=>'rss-materia.php?id='.(int)$row['id'],'order'=>$order];
+        $entries[]=['kind'=>'rss','id'=>$row['id'],'key'=>'rss:'.$row['id'],'title'=>$row['title'],'category'=>cms_category($row['category']),'image'=>rss_image_src($row),'body'=>$row['body'],'href'=>'rss-materia.php?id='.(int)$row['id'],'order'=>$order,'sort_at'=>rss_source_type(['type'=>$row['source_type'] ?? '', 'url'=>$row['source_url'] ?? ''])==='ofec'?$row['published_at']:$order['registered_at']];
     }
     if($category!==null) $entries=array_filter($entries,fn($entry)=>$entry['category']===cms_category($category));
-    usort($entries,fn($a,$b)=>strcmp($b['order']['registered_at'],$a['order']['registered_at']) ?: $b['order']['seq']<=>$a['order']['seq']);
+    usort($entries,fn($a,$b)=>strcmp($b['sort_at'] ?? $b['order']['registered_at'],$a['sort_at'] ?? $a['order']['registered_at']) ?: $b['order']['seq']<=>$a['order']['seq']);
     return array_values($entries);
 }
 function cms_news_entry($row) {

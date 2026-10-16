@@ -296,3 +296,12 @@ O importador tenta primeiro `gethostbynamel`, que utiliza o resolvedor IPv4 do s
 Atualize `rss/core.php` (ou toda a pasta `rss`), reinicie o Apache para encerrar processos antigos e faça uma atualização manual. Entradas de erro antigas permanecem no histórico; confira a execução nova. A nova mensagem identifica o domínio quando os dois caminhos falham. Esse caso ainda exige verificar DNS/conectividade no Windows/hospedagem; a correção não garante acesso a uma fonte que esteja indisponível.
 
 `php tests/network-guards-test.php` simula a resolução pelo sistema com consulta direta indisponível, a alternativa IPv6, aliases/duplicatas, bloqueio de endereços privados e uma nova tentativa bem-sucedida após falha. O comportamento real no XAMPP Windows continua dependendo da configuração local.
+
+
+### Ordem cronológica da OFEC e Fontes RSS no painel
+
+As matérias da OFEC usam a data original `published_at` em ordem decrescente nas chamadas da inicial, categorias e sugestões relacionadas. A data de chegada de uma matéria antiga ou de uma reimportação não a coloca acima de uma publicação mais recente. As outras origens continuam usando sua ordem de cadastro. A reimportação pode corrigir a data de publicação armazenada sem modificar o cadastro original nem duplicar a matéria. A limpeza e os limites de paginação continuam seguindo a política de retenção documentada acima.
+
+Fontes RSS agora abre em `admin.php?area=rss`, com a mesma barra lateral, item selecionado, estilos e botão de atualização dos demais menus. `rss-admin.php` permanece disponível com o mesmo layout e sessão. Cadastro, edição, pausa, exclusão e filtro de histórico continuam disponíveis; o filtro preserva a área RSS. O arquivo compartilhado `cms/admin-layout.php` é necessário para as duas telas.
+
+Para aplicar, atualize as pastas `rss` e `cms`, além de `admin.php` e `rss-admin.php`, e recarregue com Ctrl+F5. A ordenação já utiliza as datas armazenadas; uma atualização manual consulta novamente a OFEC e pode corrigir datas antigas recebidas da API. Não precisa reinstalar. Testes: `php tests/ofec-order-test.php` e `PHP_BIN=php python3 tests/layout-browser-test.py`, incluindo o menu RSS, cadastro e filtro dentro do painel, além do layout no celular.
