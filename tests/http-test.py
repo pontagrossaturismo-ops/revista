@@ -95,6 +95,17 @@ with tempfile.TemporaryDirectory(prefix='revista-http-') as data:
             check('Pausada' in page,'Pausar fonte')
             check('Notícia &amp; teste' not in get('noticias.php')[1],'Ocultar pausadas')
             check(get('rss-materia.php?id=1')[0]==404 and get('rss-imagem.php?id=1')[0]==404,'Fonte pausada oculta matéria e imagem')
+            status,page=get('rss-admin.php',{'csrf':csrf,'action':'save','name':'OFEC teste','url':'https://operarioferroviario.com.br/noticias','category':'esporte','type':'ofec'})
+            check(status==200 and 'Página OFEC / API pública' in page and 'value="ofec" selected' in page,'Cadastrar tipo OFEC pelo painel')
+            bad=get('rss-admin.php',{'csrf':csrf,'action':'save','name':'Falsa OFEC','url':'https://example.com/noticias','category':'esporte','type':'ofec'})[1]
+            check('Não foi possível salvar' in bad,'Tipo OFEC rejeita URL de outro domínio')
+            credit_seed="require 'rss/core.php'; $source=rss_db()->query(\"SELECT id FROM sources WHERE name='OFEC teste'\")->fetchColumn(); $item=rss_ofec_article(['id'=>1556475,'title'=>'OFEC integrada','description'=>'Resumo','articleBody'=>'<p>Conteúdo OFEC.</p>','mainImage'=>'https://example.com/photo.png','photographer'=>'Fotógrafo OFEC','createdAt'=>'2026-10-08'],1556475); $item['image_file']=hash('sha256','https://example.com/photo.png'); rss_store(rss_db(),$source,[$item]); echo rss_db()->query(\"SELECT id FROM articles WHERE title='OFEC integrada'\")->fetchColumn();"
+            article_id=subprocess.check_output([php,'-r',credit_seed],cwd=root,env=env,text=True).strip()
+            status,page=get('rss-materia.php?id='+article_id)
+            check(status==200 and 'Fotógrafo OFEC' in page and 'Conteúdo OFEC.' in page and 'https://operarioferroviario.com.br/noticias/1556475' in page,'Matéria OFEC interna com crédito e link original')
+            check('OFEC integrada' in get('esporte.php')[1],'OFEC na categoria escolhida')
+            source_id=subprocess.check_output([php,'-r',"require 'rss/core.php'; echo rss_db()->query(\"SELECT id FROM sources WHERE name='OFEC teste'\")->fetchColumn();"],cwd=root,env=env,text=True).strip()
+            get('rss-admin.php',{'csrf':csrf,'action':'delete','id':source_id})
             status,page=get('rss-admin.php',{'csrf':csrf,'action':'logout'})
             check('Fontes cadastradas' not in page and 'Senha' in page,'Logout')
             pagination_seed="require 'rss/core.php'; $db=rss_db(); $db->exec('UPDATE sources SET active=1'); $rows=[]; for($i=0;$i<95;$i++) $rows[]=['identity'=>'page-'.$i,'title'=>'Paginação '.$i,'url'=>'https://example.com/page/'.$i,'summary'=>'Resumo','image'=>'https://example.com/photo.png','image_file'=>hash('sha256','https://example.com/photo.png'),'published_at'=>gmdate('Y-m-d H:i:s',strtotime('2025-01-01 UTC')+$i)]; rss_store($db,1,$rows); rss_prune($db);"

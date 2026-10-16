@@ -244,4 +244,19 @@ O importador ignora declarações `DOCTYPE` simples, SYSTEM ou PUBLIC, sem carre
 
 ### Diagnóstico da página OFEC
 
-O site da OFEC usa módulos JavaScript carregados sob demanda; salvar a página pelo navegador pode omitir esses módulos. Em **admin.php → Configurações → Gerar diagnóstico da OFEC**, o botão baixa `ofec-diagnostico.json` com a página e os módulos públicos obtidos pela hospedagem/XAMPP. Essa ferramenta exige login e CSRF, usa os controles de rede do importador e não executa JavaScript nem inclui as credenciais locais. Ela apenas reúne evidências para desenvolver o adaptador; não habilita a importação da OFEC. Erros de acesso externos são incluídos no relatório para diagnóstico.
+O site da OFEC usa módulos JavaScript carregados sob demanda; salvar a página pelo navegador pode omitir esses módulos. Em **admin.php → Configurações → Gerar diagnóstico da OFEC**, o botão baixa `ofec-diagnostico.json` com a página e os módulos públicos obtidos pela hospedagem/XAMPP. Essa ferramenta exige login e CSRF, usa os controles de rede do importador e não executa JavaScript nem inclui as credenciais locais. Ela apenas reúne evidências para manutenção do adaptador; a importação é feita pelo importador normal, com a fonte OFEC ativa. Erros de acesso externos são incluídos no relatório para diagnóstico.
+
+
+### Importar a página de notícias da OFEC
+
+A fonte **Página de notícias OFEC (API pública)** usa o mesmo serviço público identificado nos scripts do site oficial: `https://fancontentapi.fanbase.com.br/api/owner/195/newsArticles`. Não é RSS e não requer navegador, Chrome ou execução de JavaScript no servidor. O identificador 195 e os campos `items`, `id`, `title`, `description`, `articleBody`, `mainImage`, `createdAt` e `photographer` foram identificados no diagnóstico fornecido pelo proprietário.
+
+1. Atualize `rss/core.php`, adicione `rss/ofec.php` e atualize `rss-admin.php` e `rss-materia.php`.
+2. Em Fontes RSS, edite a fonte OFEC existente: tipo **Página de notícias OFEC (API pública)**, link `https://operarioferroviario.com.br/noticias` e categoria **Esporte** (ou outra de sua escolha). Salve e ative a fonte se estiver pausada. Evite criar outra fonte com o mesmo endereço.
+3. No admin, clique em **Atualizar RSS agora**, ou execute `php rss-importar.php --force`. A tarefa de 12 horas usa automaticamente o mesmo adaptador.
+
+Fontes antigas cadastradas com `/feed/` ou `/noticias` no domínio oficial também são reconhecidas automaticamente; salvar a edição normaliza o endereço para `/noticias`. A atualização da estrutura é automática e preserva IDs, notícias e histórico. Não precisa reinstalar.
+
+Cada execução consulta até três páginas de 30 notícias, obtém o detalhe de cada matéria e reutiliza o download/cache validado das fotos. A identidade é o ID estável da matéria, impedindo duplicatas ao reimportar. Os créditos usam `photographer`, com o nome da fonte como alternativa. Artigos externos que o site apresenta por iframe são ignorados. A imagem deve vir da própria matéria na API: o logo genérico da página não é usado como foto. Falhas individuais são registradas como conteúdo parcial e não impedem importar as outras matérias; as versões armazenadas dos itens que falharam são preservadas. Falhas de conteúdo aparecem separadas das falhas de imagem no painel.
+
+Testes: `php tests/ofec-test.php` cobre o contrato identificado nos scripts, paginação limitada, fotos locais, créditos, atualização, duplicatas e falhas parciais. O teste HTTP cobre o cadastro e a leitura interna. As respostas da API foram simuladas conforme esse contrato; o acesso ao domínio da API não resolveu neste ambiente, então a confirmação da resposta ao vivo precisa ocorrer no XAMPP/hospedagem.

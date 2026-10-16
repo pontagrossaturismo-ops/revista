@@ -18,9 +18,9 @@ include __DIR__.'/header.php';
 <div class="article-header"><div class="article-meta"><span class="article-category"><?=rss_escape(cms_category_label($article['category']))?></span> <time datetime="<?=rss_escape(cms_date($article['published_at'],'Y-m-d'))?>"><?=rss_escape(cms_date($article['published_at']))?></time></div></div>
 <div class="article-content"><h1><?=$titulo?></h1>
 
-<?php if (rss_has_image($article)): ?><figure class="main-image-container"><img class="main-image" src="<?=rss_escape(rss_image_src($article))?>" alt="<?=$titulo?>"><figcaption class="photo-credit">Créditos: <a href="<?=rss_escape($article['url'])?>" target="_blank" rel="noopener noreferrer"><?=rss_escape($article['name'])?></a></figcaption></figure><?php endif; ?>
+<?php if (rss_has_image($article)): ?><figure class="main-image-container"><img class="main-image" src="<?=rss_escape(rss_image_src($article))?>" alt="<?=$titulo?>"><figcaption class="photo-credit">Créditos: <a href="<?=rss_escape($article['url'])?>" target="_blank" rel="noopener noreferrer"><?=rss_escape($article['credit'] ?: $article['name'])?></a></figcaption></figure><?php endif; ?>
 <div class="conteudo article-body"><?=nl2br(rss_escape($article['body'] ?: $article['summary']))?></div>
-<p><small>Conteúdo disponibilizado pela fonte no RSS. O feed pode conter apenas um resumo.</small></p>
+<p><small>Conteúdo disponibilizado pela fonte. Em feeds RSS, o texto pode conter apenas um resumo.</small></p>
 <p><a class="ler-mais" href="<?=rss_escape($article['url'])?>" target="_blank" rel="noopener noreferrer">Consultar publicação original</a></p>
 <p><a href="noticias.php#noticias-rss">Voltar às notícias</a></p></div>
 </article>

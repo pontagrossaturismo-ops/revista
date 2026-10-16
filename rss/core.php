@@ -1,5 +1,6 @@
 <?php
 require_once dirname(__DIR__).'/config/runtime.php';
+require_once __DIR__.'/ofec.php';
 // PHP 8.1+, PDO SQLite, cURL, SimpleXML e mbstring não é necessário.
 function rss_escape($s) { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 function rss_categories() { return function_exists('cms_categories') ? cms_categories() : ['ponta-grossa','viagem','lazer','gastronomia','eventos','esporte','noticias']; }
@@ -23,9 +24,13 @@ function rss_db() {
     $db->exec("CREATE TABLE IF NOT EXISTS content_order(seq INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,item_key TEXT NOT NULL,registered_at TEXT NOT NULL,UNIQUE(kind,item_key))");
     $db->exec('CREATE TABLE IF NOT EXISTS sources (id INTEGER PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL UNIQUE, category TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, checked_at TEXT, error TEXT)');
     $db->exec('CREATE TABLE IF NOT EXISTS articles (id INTEGER PRIMARY KEY, source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE, identity TEXT NOT NULL, title TEXT NOT NULL, url TEXT NOT NULL, summary TEXT NOT NULL, image TEXT NOT NULL, published_at TEXT NOT NULL, UNIQUE(source_id, identity))');
+    $sourceColumns=array_column($db->query('PRAGMA table_info(sources)')->fetchAll(PDO::FETCH_ASSOC),'name');
+    if(!in_array('type',$sourceColumns,true)) $db->exec("ALTER TABLE sources ADD COLUMN type TEXT NOT NULL DEFAULT 'rss'");
     $columns=array_column($db->query('PRAGMA table_info(articles)')->fetchAll(PDO::FETCH_ASSOC),'name');
-    foreach (['body','image_file','image_error'] as $column) if (!in_array($column,$columns,true)) $db->exec('ALTER TABLE articles ADD COLUMN '.$column." TEXT NOT NULL DEFAULT ''");
+    foreach (['body','image_file','image_error','credit'] as $column) if (!in_array($column,$columns,true)) $db->exec('ALTER TABLE articles ADD COLUMN '.$column." TEXT NOT NULL DEFAULT ''");
     $db->exec('CREATE TABLE IF NOT EXISTS import_runs (id INTEGER PRIMARY KEY,source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,source_url TEXT NOT NULL,finished_at TEXT NOT NULL,status TEXT NOT NULL,processed INTEGER NOT NULL DEFAULT 0,created INTEGER NOT NULL DEFAULT 0,existing INTEGER NOT NULL DEFAULT 0,image_errors INTEGER NOT NULL DEFAULT 0,error TEXT)');
+    $runColumns=array_column($db->query('PRAGMA table_info(import_runs)')->fetchAll(PDO::FETCH_ASSOC),'name');
+    if(!in_array('content_errors',$runColumns,true)) $db->exec('ALTER TABLE import_runs ADD COLUMN content_errors INTEGER NOT NULL DEFAULT 0');
     $db->exec("INSERT OR IGNORE INTO content_order(kind,item_key,registered_at) SELECT 'rss',CAST(id AS TEXT),published_at FROM articles ORDER BY id;
     CREATE TRIGGER IF NOT EXISTS articles_order_cleanup AFTER DELETE ON articles BEGIN DELETE FROM content_order WHERE kind='rss' AND item_key=CAST(OLD.id AS TEXT); END");
     return $db;
@@ -202,14 +207,14 @@ function rss_image_src($article) {
     return !empty($article['image_file']) ? 'rss-imagem.php?id='.(int)$article['id'] : $article['image'];
 }
 function rss_store($db,$source,$items) {
-    $stmt=$db->prepare('INSERT INTO articles(source_id,identity,title,url,summary,image,published_at,body,image_file,image_error) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(source_id,identity) DO UPDATE SET title=excluded.title,url=excluded.url,summary=excluded.summary,image=excluded.image,body=excluded.body,image_file=CASE WHEN excluded.image_file=\'\' AND articles.image=excluded.image THEN articles.image_file ELSE excluded.image_file END,image_error=excluded.image_error');
+    $stmt=$db->prepare('INSERT INTO articles(source_id,identity,title,url,summary,image,published_at,body,image_file,image_error,credit) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(source_id,identity) DO UPDATE SET title=excluded.title,url=excluded.url,summary=excluded.summary,image=excluded.image,body=excluded.body,image_file=CASE WHEN excluded.image_file=\'\' AND articles.image=excluded.image THEN articles.image_file ELSE excluded.image_file END,image_error=excluded.image_error,credit=excluded.credit');
     $db->beginTransaction();
     try {
         $lookup=$db->prepare('SELECT id FROM articles WHERE source_id=? AND identity=?');
         $register=$db->prepare("INSERT OR IGNORE INTO content_order(kind,item_key,registered_at) VALUES('rss',?,?)");
         usort($items,fn($a,$b)=>strcmp($a['published_at'],$b['published_at']));
         foreach ($items as $i) {
-            $stmt->execute([$source,$i['identity'],$i['title'],$i['url'],$i['summary'],$i['image'],$i['published_at'],$i['body'] ?? $i['summary'],$i['image_file'] ?? '',$i['image_error'] ?? '']);
+            $stmt->execute([$source,$i['identity'],$i['title'],$i['url'],$i['summary'],$i['image'],$i['published_at'],$i['body'] ?? $i['summary'],$i['image_file'] ?? '',$i['image_error'] ?? '',$i['credit'] ?? '']);
             $lookup->execute([$source,$i['identity']]); $register->execute([(string)$lookup->fetchColumn(),gmdate('Y-m-d H:i:s')]);
         }
         $db->commit();
@@ -248,10 +253,11 @@ function rss_refresh(?callable $fetcher=null,?callable $imageImporter=null,?call
     $sources=$db->query('SELECT * FROM sources WHERE active=1')->fetchAll(PDO::FETCH_ASSOC);
     if (!$sources && $progress) $progress('Nenhuma fonte ativa cadastrada.');
     foreach ($sources as $s) {
-        if ($progress) $progress('Fonte '.$s['name'].': buscando RSS...');
-        $processed=0; $created=0; $existing=0; $failed=0; $status='error';
+        if ($progress) $progress('Fonte '.$s['name'].(rss_source_type($s)==='ofec'?': consultando API OFEC...':': buscando RSS...'));
+        $processed=0; $created=0; $existing=0; $failed=0; $contentErrors=[]; $status='error';
         try {
-            [$xml,$url]=$fetcher($s['url']); $items=array_values(array_column(rss_parse($xml,$url),null,'identity'));
+            if(rss_source_type($s)==='ofec') { $batch=rss_ofec_items($fetcher,$progress); $items=$batch['items']; $contentErrors=$batch['errors']; if($progress && $batch['skipped']) $progress('OFEC: '.$batch['skipped'].' matérias externas ignoradas.'); }
+            else { [$xml,$url]=$fetcher($s['url']); $items=array_values(array_column(rss_parse($xml,$url),null,'identity')); }
             $lookup=$db->prepare('SELECT image,image_file FROM articles WHERE source_id=? AND identity=?');
             $position=0;
             foreach ($items as &$item) {
@@ -263,6 +269,7 @@ function rss_refresh(?callable $fetcher=null,?callable $imageImporter=null,?call
                     if (!$item['image'] && $old && rss_has_image($old)) {
                         $item['image']=$old['image']; $item['image_file']=$old['image_file']; if ($progress) $progress('Foto local reutilizada.'); continue;
                     }
+                    if (!$item['image'] && rss_source_type($s)==='ofec') throw new RuntimeException('A API OFEC não forneceu foto para esta matéria.');
                     if (!$item['image']) {
                         if ($progress) $progress('Procurando foto na página original (timeout de até 15 segundos)...');
                         try { [$page,$pageUrl]=($pageFetcher ?? 'rss_fetch')($item['url']); $item['image']=rss_page_image($page,$pageUrl); }
@@ -274,13 +281,13 @@ function rss_refresh(?callable $fetcher=null,?callable $imageImporter=null,?call
                 catch (Throwable $e) { $item['image_error']=$e->getMessage(); $failed++; if ($progress) $progress('Item sem foto válida: '.$e->getMessage()); }
             }
             unset($item);
-            rss_store($db,$s['id'],$items); $error=null; $processed=count($items); $status=$failed ? 'partial' : 'success';
+            rss_store($db,$s['id'],$items); $error=$contentErrors?implode(' ',array_slice($contentErrors,0,5)):null; $processed=count($items); $status=($failed || $contentErrors) ? 'partial' : 'success';
             $downloaded=count(array_filter($items,fn($item)=>!empty($item['image_file'])));
-            $results[]=$s['name'].': '.$processed.' itens processados | novos: '.$created.' | existentes: '.$existing.' | imagens locais: '.$downloaded.' | falhas de imagem: '.$failed;
+            $results[]=$s['name'].': '.$processed.' itens processados | novos: '.$created.' | existentes: '.$existing.' | imagens locais: '.$downloaded.' | falhas de imagem: '.$failed.' | falhas de conteúdo: '.count($contentErrors);
         } catch (Throwable $e) { $error=$e->getMessage(); $created=0; $existing=0; $results[]=$s['name'].': ERRO — '.$error; }
         $at=gmdate('Y-m-d H:i:s');
         $db->prepare('UPDATE sources SET checked_at=?,error=? WHERE id=?')->execute([$at,$error,$s['id']]);
-        $db->prepare('INSERT INTO import_runs(source_id,source_url,finished_at,status,processed,created,existing,image_errors,error) VALUES(?,?,?,?,?,?,?,?,?)')->execute([$s['id'],$s['url'],$at,$status,$processed,$created,$existing,$failed,$error]);
+        $db->prepare('INSERT INTO import_runs(source_id,source_url,finished_at,status,processed,created,existing,image_errors,error,content_errors) VALUES(?,?,?,?,?,?,?,?,?,?)')->execute([$s['id'],$s['url'],$at,$status,$processed,$created,$existing,$failed,$error,count($contentErrors)]);
         if ($progress) $progress($results[count($results)-1]);
     }
     $removed=rss_prune($db);
@@ -307,15 +314,18 @@ function rss_public_articles($category=null,$limit=54) {
     }
     return $rows;
 }
-function rss_save_source($id,$name,$url,$category) {
+function rss_save_source($id,$name,$url,$category,$type='auto') {
     $name=trim($name); $url=rss_url($url);
+    if(!in_array($type,['auto','rss','ofec'],true)) throw new InvalidArgumentException('Tipo de fonte inválido.');
+    if($type==='auto' || rss_ofec_url($url)) $type=rss_ofec_url($url)?'ofec':'rss';
+    if($type==='ofec') { if(!rss_ofec_url($url)) throw new InvalidArgumentException('Para OFEC, use https://operarioferroviario.com.br/noticias.'); $url='https://operarioferroviario.com.br/noticias'; }
     if (!$name || strlen($name)>150 || !in_array($category,rss_categories(),true)) throw new InvalidArgumentException('Confira nome e categoria.');
     $db=rss_db();
     if ($id) {
         $stmt=$db->prepare('SELECT id FROM sources WHERE id=?'); $stmt->execute([$id]);
         if (!$stmt->fetchColumn()) throw new InvalidArgumentException('Fonte não encontrada.');
-        $db->prepare('UPDATE sources SET name=?,url=?,category=?,error=CASE WHEN url<>? THEN NULL ELSE error END,checked_at=CASE WHEN url<>? THEN NULL ELSE checked_at END WHERE id=?')->execute([$name,$url,$category,$url,$url,$id]);
-    } else $db->prepare('INSERT INTO sources(name,url,category) VALUES(?,?,?)')->execute([$name,$url,$category]);
+        $db->prepare('UPDATE sources SET name=?,url=?,category=?,type=?,error=CASE WHEN url<>? THEN NULL ELSE error END,checked_at=CASE WHEN url<>? THEN NULL ELSE checked_at END WHERE id=?')->execute([$name,$url,$category,$type,$url,$url,$id]);
+    } else $db->prepare('INSERT INTO sources(name,url,category,type) VALUES(?,?,?,?)')->execute([$name,$url,$category,$type]);
     rss_prune($db);
 }
 function rss_cards($category=null,$limit=9) {
