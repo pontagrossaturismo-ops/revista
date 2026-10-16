@@ -351,9 +351,20 @@ cabeçalho e no rodapé. Atualizar a edição sem selecionar outra imagem manté
 O envio é salvo no armazenamento privado já configurado para o CMS; mantenha essa
 pasta ao atualizar o site.
 
-Preencha o nome da edição e o **link de incorporação**: somente o endereço do atributo
-`src` do iframe fornecido pela plataforma da revista, sem colar o HTML inteiro.
-O endereço precisa usar HTTP/HTTPS, e a plataforma precisa permitir exibição em iframe.
+Preencha o nome da edição e cole o **iframe completo** fornecido pelo Calaméo ou
+somente seu link de incorporação. O painel extrai e salva apenas o atributo `src`,
+ignora os demais atributos e converte endereços iniciados em `//` para HTTPS.
+Exemplo aceito (inclusive sem a tag de fechamento):
+
+```html
+<iframe src="//v.calameo.com/?bkcode=006701491b2a879071753&mode=mini" width="100%" height="600px" frameborder="0" scrolling="no" allowtransparency allowfullscreen style="margin:0 auto;">
+```
+
+A plataforma precisa permitir exibição em iframe. A revista aparece com 600 px de
+altura no computador e altura adaptada no celular. Para trocar de edição, substitua
+o iframe/link em **Admin → Configurações → Logo oficial e edição atual** e salve.
+A logo aparece menor e sem placa branca no cabeçalho e rodapé. Para transparência
+na própria imagem, envie um PNG ou WebP com fundo transparente.
 Deixar o campo vazio volta à edição local `edicoes/issuu101.html`, quando existente.
 Esses dados são salvos no CMS sem alterar a conexão com o banco nem exigir reinstalação.
 

@@ -79,8 +79,9 @@ $sections=$db->query('SELECT * FROM cms_sections ORDER BY position,id')->fetchAl
 <p>Envie a logo original para atualizar o cabeçalho e o rodapé, preservando suas proporções.</p>
 <label>Logo oficial (PNG, JPEG ou WebP, até 5 MB)<input type="file" name="brand_logo_file" accept="image/png,image/jpeg,image/webp"></label>
 <img src="<?=rss_escape(cms_brand_logo())?>" alt="Logo atual" class="admin-brand-preview">
-<?php admin_input('edition_label','Nome da edição (opcional)',$presentation['edition_label'] ?? ''); admin_input('edition_url','Link de incorporação da edição atual',$presentation['edition_url'] ?? '','url'); ?>
-<p class="field-help">Cole somente o endereço que aparece em src do iframe fornecido pelo serviço da revista. O serviço deve permitir incorporação. Deixe vazio para usar a edição local existente.</p>
+<?php admin_input('edition_label','Nome da edição (opcional)',$presentation['edition_label'] ?? '');  ?>
+<label>Iframe ou link da edição atual<textarea name="edition_url" rows="4" placeholder="Cole aqui o iframe completo fornecido pelo Calaméo"><?=rss_escape($presentation['edition_url'] ?? 'https://v.calameo.com/?bkcode=006701491b2a879071753&mode=mini')?></textarea></label>
+<p class="field-help">Aceita o iframe completo ou apenas seu endereço. O painel salva somente o link da revista e converte endereços iniciados em // para HTTPS. A altura de exibição é de 600 px no computador. Deixe vazio para usar a edição local existente.</p>
 <button>Salvar logo e edição</button>
 </form><div class="settings-grid"><section class="panel-card"><h3>Identidade e conexão</h3><p>Nome, endereço do site, senha do painel e conexão com os bancos.</p><a href="instalar.php">Abrir configurações</a></section><section class="panel-card"><h3>Feeds e atualização</h3><p>Gerencie fontes, categorias e o histórico de importações. Intervalo automático: 12 horas.</p><a href="admin.php?area=rss">Gerenciar fontes RSS</a><a href="ofec-diagnostico.php">Gerar diagnóstico da OFEC</a></section></div>
 <?php else: $showForm=!$success && (isset($_GET['new']) || $editId || $editLegacy || ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '')==='save')); ?>

@@ -58,9 +58,16 @@ with tempfile.TemporaryDirectory(prefix='revista-tourism-http-') as tmp:
             check('Edição 102' in req(admin,'admin.php?area=settings')[1],'Persistir edição no formulário')
             check(req(admin,'admin.php',dict(settings,csrf='bad'))[0]==403,'Proteger edição contra CSRF')
             check('Logo e edição atualizadas.' not in req(guest,'admin.php',settings)[1],'Impedir edição anônima')
-            for unsafe in ['javascript:alert(1)','data:text/html,teste','https://user:secret@example.com/embed','<iframe src="https://example.com"></iframe>']:
-                check('Informe somente o link' in req(admin,'admin.php',dict(settings,edition_url=unsafe))[1],'Recusar iframe inseguro: '+unsafe)
+            for unsafe in ['javascript:alert(1)','data:text/html,teste','https://user:secret@example.com/embed','<iframe src="javascript:alert(1)"></iframe>']:
+                check('Informe um link HTTP/HTTPS válido' in req(admin,'admin.php',dict(settings,edition_url=unsafe))[1],'Recusar iframe inseguro: '+unsafe)
             check('edition=102&amp;view=book' in req(guest,'index.php')[1],'Preservar edição após validação rejeitada')
+            calameo='<iframe src="//v.calameo.com/?bkcode=006701491b2a879071753&mode=mini" width="100%" height="600px" frameborder="0" scrolling="no" allowtransparency allowfullscreen style="margin:0 auto;">'
+            check('Logo e edição atualizadas.' in req(admin,'admin.php',dict(settings,edition_url=calameo))[1],'Aceitar iframe Calaméo original sem fechamento')
+            calameo_home=req(guest,'index.php')[1]
+            check('src="https://v.calameo.com/?bkcode=006701491b2a879071753&amp;mode=mini"' in calameo_home,'Normalizar Calaméo para HTTPS e manter parâmetros')
+            check('onload=' not in req(guest,'index.php')[1],'Nunca reproduzir atributos arbitrários do iframe')
+            req(admin,'admin.php',dict(settings,edition_url='<iframe src="//v.calameo.com/?bkcode=123&amp;mode=mini" onload="alert(1)"></iframe>'))
+            check('onload="alert(1)"' not in req(guest,'index.php')[1] and 'bkcode=123&amp;mode=mini' in req(guest,'index.php')[1],'Extrair apenas src e decodificar entidades HTML')
             req(admin,'admin.php',dict(settings,edition_url='',edition_label=''))
             home=req(guest,'index.php')[1]
             check('Roteiros para o seu ritmo' in home and 'Festival de teste' in home and 'edition-empty' in home,'Inicial integra roteiros, agenda e alternativa à edição ausente')

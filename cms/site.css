@@ -15,9 +15,9 @@
 .social-links a{display:inline-flex;align-items:center;justify-content:center;min-width:32px;min-height:32px}.search-icon{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:5px 9px;font:inherit}.whatsapp-button svg{color:#fff}.company-whatsapp svg{flex-shrink:0}.logo-placeholder{height:auto}
 
 /* Identidade e leitura editorial: fotos inteiras, títulos com respiro. */
-.logo-placeholder img:not([src="assets/brand.svg"]),.footer-logo:not([src="assets/brand.svg"]){background:#fff;border-radius:8px;padding:7px;box-sizing:border-box;object-fit:contain}
-.logo-placeholder img{height:94px;max-width:100%}
-.footer-logo{height:110px;width:200px}
+.logo-placeholder img:not([src="assets/brand.svg"]),.footer-logo:not([src="assets/brand.svg"]){background:transparent;border-radius:0;padding:0;box-sizing:border-box;object-fit:contain}
+.logo-placeholder,.logo-placeholder img{width:140px}.logo-placeholder img{height:76px;max-width:100%}
+.footer-logo{height:85px;width:150px}
 .article-page .single-article .article-content h1{font-size:clamp(1.9rem,3.3vw,3rem);line-height:1.22;letter-spacing:-.025em;text-align:center;max-width:1000px;margin:12px auto 32px;text-wrap:balance;color:#223149}
 .article-page .article-meta{justify-content:center}
 .article-page .article-content img,.article-page .main-image{max-height:500px;object-fit:contain;object-position:center;height:auto}
@@ -27,6 +27,6 @@
 .edition-frame iframe{display:block;width:100%;height:600px;border:0}
 .edition-caption{text-align:center;color:#526077;margin:12px 0}
 @media(min-width:1400px){.spotlight-main{min-height:0;max-height:500px}}
-@media(max-width:600px){.logo-placeholder img{height:80px}.spotlight-main{height:350px;min-height:0}.edition-frame iframe{height:430px}.article-page .single-article .article-content h1{margin-bottom:24px}}
+@media(max-width:600px){.logo-placeholder,.logo-placeholder img{width:120px}.logo-placeholder img{height:66px}.spotlight-main{height:350px;min-height:0}.edition-frame iframe{height:430px}.article-page .single-article .article-content h1{margin-bottom:24px}}
 
 .spotlight-main>a{min-height:0;height:100%}
