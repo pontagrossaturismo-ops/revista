@@ -11,6 +11,8 @@ $groups=[1=>[],2=>[],3=>[]];
 for($i=0;$i<95;$i++) $groups[$i%2+1][]=['identity'=>'travel-'.$i,'title'=>'Viagem '.$i,'url'=>'https://example.com/travel/'.$i,'summary'=>'Resumo','image'=>'https://example.com/photo.png','image_file'=>$i===0?$old:($i===1?$unshared:$shared),'published_at'=>gmdate('Y-m-d H:i:s',strtotime('2026-01-01 UTC')+$i)];
 for($i=0;$i<10;$i++) $groups[3][]=['identity'=>'lazer-'.$i,'title'=>'Lazer '.$i,'url'=>'https://example.com/lazer/'.$i,'summary'=>'Resumo','image'=>'https://example.com/old.png','image_file'=>$old,'published_at'=>'2026-01-01 00:00:00'];
 foreach($groups as $source=>$items) rss_store($db,$source,$items);
+// Este cenário foi cadastrado em ordem cronológica; preserve essa ordem na carga em lotes.
+$db->exec("UPDATE content_order SET registered_at=(SELECT published_at FROM articles WHERE articles.id=CAST(content_order.item_key AS INTEGER)) WHERE kind='rss'");
 $db->exec("INSERT INTO import_runs(source_id,source_url,finished_at,status,processed) VALUES(1,'https://example.com/a','2026-01-01','success',48)");
 page_check(rss_prune($db)===5,'Excluir excedente agregado de múltiplas fontes da mesma categoria');
 page_check(count(rss_public_articles('viagem',null))===90 && count(rss_public_articles('lazer',null))===10,'Retenção isolada por categoria');

@@ -240,11 +240,17 @@ function rss_prune($db=null) {
     $db->beginTransaction();
     try {
         $categories=$db->query('SELECT DISTINCT category FROM sources')->fetchAll(PDO::FETCH_COLUMN);
-        $find=$db->prepare('SELECT a.id,a.image_file FROM articles a JOIN sources s ON s.id=a.source_id WHERE s.category=? ORDER BY a.published_at DESC,a.id DESC LIMIT -1 OFFSET 90');
+        $find=$db->prepare("SELECT a.id,a.source_id,a.image_file,s.active FROM articles a JOIN sources s ON s.id=a.source_id LEFT JOIN content_order o ON o.kind='rss' AND o.item_key=CAST(a.id AS TEXT) WHERE s.category=? ORDER BY COALESCE(o.registered_at,a.published_at) DESC,o.seq DESC,a.id DESC");
         $delete=$db->prepare('DELETE FROM articles WHERE id=?');
         foreach ($categories as $category) {
-            $find->execute([$category]); $older=$find->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($older as $article) { $delete->execute([$article['id']]); $removed++; if ($article['image_file']) $files[$article['image_file']]=true; }
+            $find->execute([$category]); $rows=$find->fetchAll(PDO::FETCH_ASSOC); $visible=0; $pending=[];
+            foreach($rows as $article) {
+                // Pendências e fontes pausadas não deslocam notícias publicadas.
+                if($article['active'] && rss_has_image($article)) $keep=++$visible<=90;
+                else { $source=(int)$article['source_id']; $pending[$source]=($pending[$source] ?? 0)+1; $keep=$pending[$source]<=90; }
+                if($keep) continue;
+                $delete->execute([$article['id']]); $removed++; if($article['image_file']) $files[$article['image_file']]=true;
+            }
         }
         $db->commit();
     } catch(Throwable $e) { $db->rollBack(); throw $e; }
@@ -293,7 +299,11 @@ function rss_refresh(?callable $fetcher=null,?callable $imageImporter=null,?call
                     if ($progress) $progress('Baixando/validando a foto...');
                     $item['image_file']=($imageImporter ?? 'rss_cache_image')($item['image']);
                 }
-                catch (Throwable $e) { $item['image_error']=$e->getMessage(); $failed++; if ($progress) $progress('Item sem foto válida: '.$e->getMessage()); }
+                catch (Throwable $e) {
+                    $item['image_error']=$e->getMessage(); $failed++;
+                    if($old && rss_has_image($old)) { $item['image']=$old['image']; $item['image_file']=$old['image_file']; if($progress) $progress('Falha ao atualizar foto; foto local anterior preservada: '.$e->getMessage()); }
+                    elseif($progress) $progress('Item sem foto válida: '.$e->getMessage());
+                }
             }
             unset($item);
             rss_store($db,$s['id'],$items); $error=$contentErrors?implode(' ',array_slice($contentErrors,0,5)):null; $processed=count($items); $status=($failed || $contentErrors) ? 'partial' : 'success';
@@ -306,7 +316,7 @@ function rss_refresh(?callable $fetcher=null,?callable $imageImporter=null,?call
         if ($progress) $progress($results[count($results)-1]);
     }
     $removed=rss_prune($db);
-    if ($removed && $progress) $progress('Limpeza: '.$removed.' notícias antigas excluídas (máximo 90 por categoria).');
+    if ($removed && $progress) $progress('Limpeza: '.$removed.' notícias antigas excluídas (90 publicadas por categoria; até 90 pendências por fonte).');
     return $results;
 }
 function rss_has_image($article) {

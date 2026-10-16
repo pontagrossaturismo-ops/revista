@@ -48,7 +48,7 @@ Os cards e o CSS atuais são mantidos. A página inicial tem seções configurá
 
 `feed.php` exporta notícias importadas e aceita `?categoria=viagem` e demais categorias. As rotas antigas `g1_turismo_rss.php` e `g1_turismo_generate_rss.php` exportam a categoria viagem; para receber G1, cadastre sua URL RSS no painel. `example_display.php` e `display.php` usam o armazenamento local. O proxy de páginas foi desativado.
 
-A importação verifica TLS, protocolos, DNS/IPs públicos e cada redirecionamento; limita respostas a 2 MB/100 itens e bloqueia DTD/entidades XML. Precisa de DNS e saída HTTP/HTTPS direta para as fontes. URLs devem ser de feeds, não páginas iniciais. Recomenda-se limitar tentativas de login pelo servidor. A retenção automática mantém até 90 notícias RSS por categoria; monitore também arquivos e backups.
+A importação verifica TLS, protocolos, DNS/IPs públicos e cada redirecionamento; limita respostas a 2 MB/100 itens e bloqueia DTD/entidades XML. Precisa de DNS e saída HTTP/HTTPS direta para as fontes. URLs devem ser de feeds, não páginas iniciais. Recomenda-se limitar tentativas de login pelo servidor. A retenção automática mantém até 90 notícias RSS publicadas por categoria e até 90 pendências por fonte; monitore também arquivos e backups.
 
 ## Alternativa: variáveis de ambiente
 
@@ -113,7 +113,7 @@ Os cards abrem `rss-materia.php?id=...` na mesma aba, usando o layout atual. A p
 
 São reconhecidas imagens em media:content/media:thumbnail (inclusive grupos), enclosure, image/url, Atom XHTML e imagens no HTML de description/content:encoded, incluindo campos de carregamento tardio e HTML com entidades adicionais. Quando o feed não fornecer uma foto reconhecida, o importador consulta a página pública da matéria e procura og:image, twitter:image, image_src ou uma imagem dentro de article. Não seleciona um logo genérico fora do artigo. A imagem principal é baixada para `images` dentro do armazenamento RSS privado e servida por `rss-imagem.php`, sem expor a pasta. Imagens JPEG, PNG, GIF e WebP são aceitas, com limite de 5 MB e 40 milhões de pixels. Certificados e validação de destino continuam ativos. A primeira atualização pode demorar devido aos downloads.
 
-Falha ao baixar uma imagem não impede armazenar o texto, mas a matéria fica oculta do site até que uma foto válida seja baixada. Não há mais alternativa com imagem remota. Itens cujo feed não forneça imagem também ficam ocultos. O terminal e o painel mostram falhas de imagens por fonte. O texto é exibido escapado, com parágrafos, sem executar HTML/scripts do feed. Inclua a pasta images nos backups; a retenção remove imagens dos itens excluídos apenas quando não têm outras referências.
+Falha ao baixar uma imagem não impede armazenar o texto. Se a matéria já tinha foto local válida, ela é preservada mesmo quando a URL remota muda; a falha fica registrada para nova tentativa. Sem uma foto local válida anterior, a matéria fica oculta até que uma foto seja baixada. Não há mais alternativa com imagem remota. Itens cujo feed não forneça imagem também ficam ocultos. O terminal e o painel mostram falhas de imagens por fonte. O texto é exibido escapado, com parágrafos, sem executar HTML/scripts do feed. Inclua a pasta images nos backups; a retenção remove imagens dos itens excluídos apenas quando não têm outras referências.
 
 Os testes adicionais `php tests/media-test.php` verificam migração de base antiga, conteúdo completo, extração/cache/validação de imagem, atualização sem duplicar e tolerância a erros de download. Os testes HTTP também verificam a leitura interna e a resposta PNG da imagem local.
 
@@ -159,7 +159,7 @@ O filtro “Todas” foi removido. `noticias.php` continua como entrada geral pe
 
 O limite de 15 inclui RSS e matérias editoriais, misturadas pela ordem de cadastro, até 90 posições por listagem. A página inicial tem até quatro chamadas por seção configurável.
 
-Ao terminar uma importação, o sistema **exclui permanentemente** as notícias RSS mais antigas que excederem 90 registros por categoria, somando todas as fontes dessa categoria. A ordem é data de publicação e ID como desempate; inclui registros ocultos ou de fontes pausadas. Alterar uma fonte também aplica a limpeza, inclusive quando ela é movida para uma categoria que já atingiu o limite. Faça backup antes da primeira execução com esta atualização se quiser preservar o histórico de matérias antigas. As matérias editoriais da tabela MySQL `materia` não são apagadas. O histórico das importações é preservado; imagens das notícias excluídas são removidas somente se nenhum outro registro as utiliza.
+Ao terminar uma importação, o sistema **exclui permanentemente** as notícias publicadas que excederem 90 por categoria, somando as fontes ativas dessa categoria. A seleção segue a ordem de cadastro (`content_order`), e não a data original da matéria: uma notícia da OFEC recém importada não é descartada apenas por ter sido publicada antes. Notícias sem foto válida e fontes pausadas ficam em uma reserva separada de até 90 itens por fonte, para novas tentativas; não ocupam as vagas de matérias publicadas. O armazenamento pode, portanto, conter mais de 90 registros na categoria, mas o site mantém no máximo seis páginas de 15 chamadas. Alterar uma fonte também aplica a limpeza. Faça backup para preservar o histórico de matérias antigas. As matérias editoriais da tabela MySQL `materia` não são apagadas. O histórico das importações é preservado; imagens de notícias excluídas são removidas somente se nenhum outro registro as utiliza.
 
 Para aplicar o limite à base existente, atualize os arquivos e execute novamente `rss-importar.php --force`. Sem nova importação, a listagem já limita as posições a 90, mas registros anteriores ainda podem estar armazenados até a limpeza. Fontes podem reenviar itens antigos: o limite continua sendo reaplicado ao fim de cada execução.
 
@@ -271,3 +271,10 @@ Para aplicar no XAMPP: aguarde a importação em andamento terminar, pare o Apac
 O armazenamento deve estar em disco local com suporte a bloqueios e ao modo WAL. Mudanças futuras de estrutura devem incrementar as versões de migração correspondentes (RSS: `PRAGMA user_version`; CMS: `cms_meta.schema_version`).
 
 `PHP_BIN=php python3 tests/storage-concurrency-test.py` verifica seis inicializações paralelas, leitura HTTP real durante uma transação de escrita, consultas sem gravar, recuperação após um bloqueio persistente e preservação das notícias. O teste roda no Linux; o comportamento no XAMPP Windows deve ser confirmado após atualizar os arquivos.
+
+
+### Notícias que somem após importar
+
+A limpeza separa notícias publicadas de pendências de imagem/fontes pausadas e usa a ordem de cadastro. Uma falha ao atualizar a imagem preserva o arquivo anterior quando ele continua válido. O teste `php tests/publication-retention-test.php` reproduz uma notícia antiga da OFEC junto de 100 itens novos sem foto de outra fonte, a entrada de uma matéria com data de publicação antiga e a troca de URL da foto seguida de falha no download.
+
+Atualize `rss/core.php` e `rss-admin.php` e execute uma nova atualização manual para tentar recuperar os itens que a versão anterior removeu. A recuperação depende de essas notícias ainda serem fornecidas pela API; o importador consulta até 90 por execução. Não reinstale nem recrie a fonte: o identificador existente e o histórico são preservados. Se a fonte mostrar notícias armazenadas, mas nenhuma publicada, confira os erros de imagem recentes e o resultado da última execução.
