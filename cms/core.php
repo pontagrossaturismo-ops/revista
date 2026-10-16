@@ -4,12 +4,28 @@ function cms_db() {
     $db=rss_db(); static $ready=false; if($ready) return $db;
     $db->exec("CREATE TABLE IF NOT EXISTS content_order(seq INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,item_key TEXT NOT NULL,registered_at TEXT NOT NULL,UNIQUE(kind,item_key));
     CREATE TABLE IF NOT EXISTS cms_sections(id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,category TEXT NOT NULL,color TEXT NOT NULL,position INTEGER NOT NULL,active INTEGER NOT NULL DEFAULT 1);
-    CREATE TABLE IF NOT EXISTS cms_banners(id INTEGER PRIMARY KEY AUTOINCREMENT,section_id INTEGER NOT NULL REFERENCES cms_sections(id) ON DELETE CASCADE,title TEXT NOT NULL,image TEXT NOT NULL,link TEXT NOT NULL DEFAULT '',active INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS cms_banners(id INTEGER PRIMARY KEY AUTOINCREMENT,section_id INTEGER REFERENCES cms_sections(id) ON DELETE SET NULL,title TEXT NOT NULL,image TEXT NOT NULL,link TEXT NOT NULL DEFAULT '',active INTEGER NOT NULL DEFAULT 0,show_home INTEGER NOT NULL DEFAULT 1,show_rss INTEGER NOT NULL DEFAULT 0,show_manual INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS cms_news(id INTEGER PRIMARY KEY AUTOINCREMENT,legacy_id INTEGER UNIQUE,title TEXT NOT NULL,category TEXT NOT NULL,image TEXT NOT NULL,body TEXT NOT NULL,created_at TEXT NOT NULL,deleted INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS cms_companies(id INTEGER PRIMARY KEY AUTOINCREMENT,legacy_slug TEXT UNIQUE,slug TEXT NOT NULL UNIQUE,data TEXT NOT NULL,deleted INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS company_views(company_key TEXT PRIMARY KEY,total INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS cms_media(hash TEXT PRIMARY KEY,mime TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS cms_meta(name TEXT PRIMARY KEY,value TEXT NOT NULL)");
+    $bannerColumns=$db->query('PRAGMA table_info(cms_banners)')->fetchAll(PDO::FETCH_ASSOC);
+    foreach($bannerColumns as $column) if($column['name']==='section_id' && $column['notnull']) {
+        $db->beginTransaction();
+        try {
+            $db->exec("CREATE TABLE cms_banners_new(id INTEGER PRIMARY KEY AUTOINCREMENT,section_id INTEGER REFERENCES cms_sections(id) ON DELETE SET NULL,title TEXT NOT NULL,image TEXT NOT NULL,link TEXT NOT NULL DEFAULT '',active INTEGER NOT NULL DEFAULT 0,show_home INTEGER NOT NULL DEFAULT 1,show_rss INTEGER NOT NULL DEFAULT 0,show_manual INTEGER NOT NULL DEFAULT 0);
+            INSERT INTO cms_banners_new(id,section_id,title,image,link,active) SELECT id,section_id,title,image,link,active FROM cms_banners;
+            DROP TABLE cms_banners; ALTER TABLE cms_banners_new RENAME TO cms_banners"); $db->commit();
+        } catch(Throwable $e) { $db->rollBack(); throw $e; }
+        break;
+    }
+    $db->exec("CREATE TRIGGER IF NOT EXISTS section_banner_cleanup AFTER DELETE ON cms_sections BEGIN
+        UPDATE cms_banners SET show_home=0 WHERE section_id IS NULL;
+        DELETE FROM cms_banners WHERE section_id IS NULL AND show_home=0 AND show_rss=0 AND show_manual=0;
+    END");
+    $newsColumns=array_column($db->query('PRAGMA table_info(cms_news)')->fetchAll(PDO::FETCH_ASSOC),'name');
+    if(!in_array('credit',$newsColumns,true)) $db->exec("ALTER TABLE cms_news ADD COLUMN credit TEXT NOT NULL DEFAULT ''");
     if(!$db->query("SELECT 1 FROM cms_meta WHERE name='sections_seeded'")->fetchColumn()) {
         $db->beginTransaction();
         try {
@@ -83,7 +99,7 @@ function cms_news_entries($category=null,$legacyRows=null) {
     $legacyNews=$legacyRows ?? cms_legacy_news(); usort($legacyNews,fn($a,$b)=>(int)$a['id']<=>(int)$b['id']);
     foreach($legacyNews as $row) {
         $override=$overrides[(string)$row['id']] ?? null;
-        if($override) { if(!$override['deleted']) $entries[]=cms_news_entry($override)+cms_legacy_metadata($row); continue; }
+        if($override) { if(!$override['deleted']) { $entry=cms_news_entry($override); $metadata=cms_legacy_metadata($row); if(empty($entry['credit'])) $entry['credit']=$metadata['credit']; $entries[]=$entry+$metadata; } continue; }
         $date=null;
         foreach(['data_cadastro','created_at','data','data_publicacao'] as $field) if(!empty($row[$field]) && ($stamp=strtotime($row[$field]))) { $date=gmdate('Y-m-d H:i:s',$stamp); break; }
         $order=cms_register('sql',$row['id'],$date ?: ($legacySeeded?gmdate('Y-m-d H:i:s'):'1970-01-01 00:00:00'));
@@ -100,23 +116,23 @@ function cms_news_entries($category=null,$legacyRows=null) {
 }
 function cms_news_entry($row) {
     $kind=$row['legacy_id']!==null?'sql':'cms'; $id=$row['legacy_id'] ?? $row['id'];
-    return ['kind'=>$kind,'id'=>$id,'key'=>$kind.':'.$id,'title'=>$row['title'],'category'=>$row['category'],'image'=>$row['image'],'body'=>$row['body'],'href'=>$kind==='sql'?'materia.php?id='.(int)$id:'noticia.php?id='.(int)$id,'order'=>cms_register($kind,$id,$row['created_at'])];
+    return ['kind'=>$kind,'id'=>$id,'key'=>$kind.':'.$id,'title'=>$row['title'],'category'=>$row['category'],'image'=>$row['image'],'body'=>$row['body'],'credit'=>$row['credit'] ?? '','href'=>$kind==='sql'?'materia.php?id='.(int)$id:'noticia.php?id='.(int)$id,'order'=>cms_register($kind,$id,$row['created_at'])];
 }
 function cms_save_news($id,$legacy,$values) {
-    $db=cms_db(); $title=trim($values['title'] ?? ''); $category=cms_category($values['category'] ?? ''); $body=trim($values['body'] ?? ''); $image=cms_asset($values['image'] ?? '');
+    $db=cms_db(); $title=trim($values['title'] ?? ''); $category=cms_category($values['category'] ?? ''); $body=trim($values['body'] ?? ''); $image=cms_asset($values['image'] ?? ''); $credit=trim((string)($values['credit'] ?? ''));
     if(!$title || strlen($title)>300 || !$category || !$body || !$image) throw new InvalidArgumentException('Preencha título, categoria, imagem e texto.');
     if($legacy) {
         $exists=$db->prepare('SELECT * FROM cms_news WHERE legacy_id=?'); $exists->execute([$legacy]); $old=$exists->fetch(PDO::FETCH_ASSOC);
         if(!$old && !cms_legacy_news($legacy)) throw new InvalidArgumentException('Matéria não encontrada.');
         $order=cms_register('sql',$legacy,'1970-01-01 00:00:00');
-        $db->prepare('INSERT INTO cms_news(legacy_id,title,category,image,body,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT(legacy_id) DO UPDATE SET title=excluded.title,category=excluded.category,image=excluded.image,body=excluded.body,deleted=0')->execute([$legacy,$title,$category,$image,$body,$order['registered_at']]);
+        $db->prepare('INSERT INTO cms_news(legacy_id,title,category,image,body,created_at,credit) VALUES(?,?,?,?,?,?,?) ON CONFLICT(legacy_id) DO UPDATE SET title=excluded.title,category=excluded.category,image=excluded.image,body=excluded.body,credit=excluded.credit,deleted=0')->execute([$legacy,$title,$category,$image,$body,$order['registered_at'],$credit]);
         return;
     }
     if($id) {
-        $stmt=$db->prepare('UPDATE cms_news SET title=?,category=?,image=?,body=? WHERE id=? AND legacy_id IS NULL AND deleted=0'); $stmt->execute([$title,$category,$image,$body,$id]);
+        $stmt=$db->prepare('UPDATE cms_news SET title=?,category=?,image=?,body=?,credit=? WHERE id=? AND legacy_id IS NULL AND deleted=0'); $stmt->execute([$title,$category,$image,$body,$credit,$id]);
         if(!$stmt->rowCount()) throw new InvalidArgumentException('Notícia não encontrada.');
     } else {
-        $db->prepare('INSERT INTO cms_news(title,category,image,body,created_at) VALUES(?,?,?,?,?)')->execute([$title,$category,$image,$body,gmdate('Y-m-d H:i:s')]); cms_register('cms',$db->lastInsertId());
+        $db->prepare('INSERT INTO cms_news(title,category,image,body,created_at,credit) VALUES(?,?,?,?,?,?)')->execute([$title,$category,$image,$body,gmdate('Y-m-d H:i:s'),$credit]); cms_register('cms',$db->lastInsertId());
     }
 }
 function cms_delete_news($id,$legacy=0) {
@@ -184,12 +200,53 @@ function cms_save_section($id,$values) {
     else cms_db()->prepare('INSERT INTO cms_sections(title,category,color,position,active) VALUES(?,?,?,?,?)')->execute([$title,$category,$color,$position,$active]);
 }
 function cms_save_banner($id,$values) {
-    $section=(int)($values['section_id'] ?? 0); $stmt=cms_db()->prepare('SELECT 1 FROM cms_sections WHERE id=?'); $stmt->execute([$section]);
+    $home=isset($values['banner_targets']) ? !empty($values['show_home']) : (isset($values['show_home']) ? !empty($values['show_home']) : true);
+    $rss=!empty($values['show_rss']); $manual=!empty($values['show_manual']);
+    $section=$home?(int)($values['section_id'] ?? 0):null;
+    if($home) { $stmt=cms_db()->prepare('SELECT 1 FROM cms_sections WHERE id=?'); $stmt->execute([$section]); if(!$stmt->fetchColumn()) throw new InvalidArgumentException('Escolha a seção do banner na página inicial.'); }
     $title=trim($values['title'] ?? ''); $image=cms_asset($values['image'] ?? ''); $link=cms_asset($values['link'] ?? '');
-    if(!$stmt->fetchColumn() || !$title || !$image) throw new InvalidArgumentException('Preencha título, imagem e seção do banner.');
-    $args=[$section,$title,$image,$link,empty($values['active'])?0:1];
-    if($id) { $args[]=$id; cms_db()->prepare('UPDATE cms_banners SET section_id=?,title=?,image=?,link=?,active=? WHERE id=?')->execute($args); }
-    else cms_db()->prepare('INSERT INTO cms_banners(section_id,title,image,link,active) VALUES(?,?,?,?,?)')->execute($args);
+    if(!$title || !$image || !($home || $rss || $manual)) throw new InvalidArgumentException('Preencha título, imagem e onde exibir o banner.');
+    $args=[$section,$title,$image,$link,empty($values['active'])?0:1,(int)$home,(int)$rss,(int)$manual];
+    if($id) { $args[]=$id; cms_db()->prepare('UPDATE cms_banners SET section_id=?,title=?,image=?,link=?,active=?,show_home=?,show_rss=?,show_manual=? WHERE id=?')->execute($args); }
+    else cms_db()->prepare('INSERT INTO cms_banners(section_id,title,image,link,active,show_home,show_rss,show_manual) VALUES(?,?,?,?,?,?,?,?)')->execute($args);
+}
+function cms_render_banners($placement,$section=null) {
+    $columns=['home'=>'show_home','rss'=>'show_rss','manual'=>'show_manual'];
+    if(!isset($columns[$placement])) return;
+    $sql='SELECT * FROM cms_banners WHERE active=1 AND '.$columns[$placement].'=1'; $args=[];
+    if($placement==='home') { $sql.=' AND section_id=?'; $args[]=$section; }
+    $stmt=cms_db()->prepare($sql.' ORDER BY id'); $stmt->execute($args);
+    foreach($stmt as $banner) {
+        echo '<aside class="home-banner ad-slot" aria-label="Publicidade"><p>Publicidade</p>';
+        if($banner['link']) echo '<a href="'.rss_escape($banner['link']).'" target="_blank" rel="noopener sponsored">';
+        echo '<img loading="lazy" src="'.rss_escape($banner['image']).'" alt="'.rss_escape($banner['title']).'">';
+        if($banner['link']) echo '</a>'; echo '</aside>';
+    }
+}
+function cms_reorder_sections($ids) {
+    if(!is_array($ids)) throw new InvalidArgumentException('Ordem de seções inválida.');
+    $ids=array_map(fn($id)=>filter_var($id,FILTER_VALIDATE_INT),$ids);
+    $db=cms_db(); $db->beginTransaction();
+    try {
+        $current=$db->query('SELECT id FROM cms_sections ORDER BY id')->fetchAll(PDO::FETCH_COLUMN);
+        $sorted=$ids; sort($sorted,SORT_NUMERIC); $expected=array_map('intval',$current); sort($expected,SORT_NUMERIC);
+        if(in_array(false,$ids,true) || count(array_unique($ids))!==count($ids) || $sorted!==$expected) throw new InvalidArgumentException('A lista mudou. Atualize o painel antes de ordenar novamente.');
+        $stmt=$db->prepare('UPDATE cms_sections SET position=? WHERE id=?'); foreach($ids as $index=>$id) $stmt->execute([$index+1,$id]);
+        $db->commit();
+    } catch(Throwable $e) { $db->rollBack(); throw $e; }
+}
+function cms_related($category,$currentKey,$limit=4) {
+    return array_slice(array_values(array_filter(cms_news_entries($category),fn($entry)=>$entry['key']!==$currentKey)),0,$limit);
+}
+function cms_render_related($category,$currentKey) {
+    $entries=cms_related($category,$currentKey); if(!$entries) return;
+    echo '<section class="related-articles article-related"><h2 class="section-title">Conteúdos relacionados</h2><div class="home-news-grid">';
+    foreach($entries as $entry) cms_render_card($entry); echo '</div></section>';
+}
+function cms_category_label($category) { return ucwords(str_replace('-',' ',cms_category($category))); }
+function cms_date($date,$format='d/m/Y') {
+    try { return (new DateTimeImmutable($date,new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('America/Sao_Paulo'))->format($format); }
+    catch(Throwable $e) { return ''; }
 }
 function cms_render_card($entry) {
     echo '<article class="noticia-card compact-news">';

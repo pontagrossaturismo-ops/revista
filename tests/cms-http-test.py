@@ -61,6 +61,10 @@ with tempfile.TemporaryDirectory(prefix='revista-cms-http-') as tmp:
             save('banners',id=1,section_id=1,title='Anúncio de teste',image='https://example.com/banner.png',link='https://example.com/promocao',active=1)
             home=req('index.php')[1]
             check(home.index('data-section="ponta-grossa"')<home.index('Anúncio de teste')<home.index('data-section="viagem"'),'Banner entre seções')
+            save('banners',title='Publicidade das matérias',image='https://example.com/article-banner.png',banner_targets=1,show_rss=1,show_manual=1,active=1)
+            check('Publicidade das matérias' in req('noticia.php?id=1')[1] and 'Publicidade das matérias' not in req('index.php')[1],'Banner de matéria sem seção e sem exibição na home')
+            status,editor=req('admin.php?area=banners&edit=2')
+            check('name="show_rss"' in editor and 'name="show_manual"' in editor and 'Publicidade das matérias' in editor,'Opções dos banners no formulário')
             save('sections',id=1,title='Minha Cidade',category='ponta-grossa',color='#112233',position=1,active=1)
             check('--section-color:#112233' in req('index.php')[1] and 'Minha Cidade' in req('index.php')[1],'Cor e título configuráveis')
             save('sections',title='Eventos locais',category='eventos',color='#334455',position=6,active=1)

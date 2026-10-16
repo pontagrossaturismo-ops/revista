@@ -20,13 +20,14 @@ guia_notice($guide['state']);
 ?>
 <?php if($guide['state']==='ok' && !$store): ?><h1>Estabelecimento não encontrado</h1><p>Confira o endereço ou volte ao guia.</p><?php endif; ?>
 <?php if($store): ?>
-<article class="single-article">
+<article class="single-article company-profile">
 <?php $cover=guia_asset($store['capa'] ?? ''); $profile=guia_asset($store['perfil'] ?? ''); ?>
 <?php if($cover): ?><img src="<?=rss_escape($cover)?>" alt="<?=rss_escape($store['nome'] ?? '')?>" style="width:100%;max-height:350px;object-fit:cover"><?php endif; ?>
 <div class="article-content">
 <?php if($profile): ?><img src="<?=rss_escape($profile)?>" width="180" style="border-radius:100px" alt="<?=rss_escape($store['nome'] ?? '')?>"><?php endif; ?>
-<h1><?=rss_escape($store['nome'] ?? '')?></h1><p><?=rss_escape($store['local'] ?? '')?><br><?=rss_escape($store['telefone'] ?? '')?></p>
-<?php try { $whatsapp=cms_whatsapp($store['whatsapp'] ?? $store['whats'] ?? ''); } catch(InvalidArgumentException $e) { $whatsapp=''; } if($whatsapp): ?><a class="whatsapp-button" href="<?=rss_escape($whatsapp)?>" target="_blank" rel="noopener noreferrer">Falar pelo WhatsApp</a><?php endif; ?>
+<h1><?=rss_escape($store['nome'] ?? '')?></h1><p class="company-address"><?=rss_escape($store['local'] ?? '')?></p>
+<?php try { $whatsapp=cms_whatsapp($store['whatsapp'] ?? $store['whats'] ?? ''); } catch(InvalidArgumentException $e) { $whatsapp=''; } if($whatsapp): ?><a class="company-whatsapp" href="<?=rss_escape($whatsapp)?>" target="_blank" rel="noopener noreferrer"><i class="fab fa-whatsapp" aria-hidden="true"></i> Falar pelo WhatsApp</a><?php endif; ?>
+<p class="company-phone"><?=rss_escape($store['telefone'] ?? '')?></p>
 <div class="conteudo"><?=nl2br(rss_escape($store['descritivo'] ?? ''))?></div>
 <div class="gallery-grid"><?php for($i=1;$i<=8;$i++): $photo=guia_asset($store['foto'.$i] ?? ''); if(!$photo) continue; ?><img src="<?=rss_escape($photo)?>" alt="Foto de <?=rss_escape($store['nome'] ?? 'estabelecimento')?>" loading="lazy" class="gallery-image"><?php endfor; ?></div>
 <?php $map=guia_asset($store['mapa'] ?? ''); if(preg_match('~^https?://~i',$map)): ?><iframe src="<?=rss_escape($map)?>" title="Localização do estabelecimento" width="100%" height="480" loading="lazy" referrerpolicy="no-referrer"></iframe><?php endif; ?>

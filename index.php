@@ -28,9 +28,7 @@ $items=array_slice(array_values(array_filter($allNews,fn($entry)=>$entry['catego
 <div class="home-section-heading"><h2 class="section-title"><?=rss_escape($section['title'])?></h2><a href="categoria.php?categoria=<?=rawurlencode($section['category'])?>">Ver mais</a></div>
 <div class="home-news-grid"><?php foreach($items as $entry) cms_render_card($entry); ?></div>
 <?php if(!$items): ?><p>Novas notícias em breve.</p><?php endif; ?></section>
-<?php $banners=cms_db()->prepare('SELECT * FROM cms_banners WHERE section_id=? AND active=1 ORDER BY id'); $banners->execute([$section['id']]); foreach($banners as $banner): ?>
-<aside class="home-banner" aria-label="Publicidade"><p>Publicidade</p><?php if($banner['link']): ?><a href="<?=rss_escape($banner['link'])?>" target="_blank" rel="noopener sponsored"><?php endif; ?><img loading="lazy" src="<?=rss_escape($banner['image'])?>" alt="<?=rss_escape($banner['title'])?>"><?php if($banner['link']): ?></a><?php endif; ?></aside>
-<?php endforeach; endforeach; ?>
+<?php cms_render_banners('home',$section['id']); endforeach; ?>
 
 <div style="background: #f0f0f0; border-radius: 10px; box-shadow: var(--shadow-md); border: #ddd 2px solid; padding: 10px" ><br>
 

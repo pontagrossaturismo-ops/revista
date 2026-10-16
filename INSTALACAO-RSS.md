@@ -176,9 +176,9 @@ Acesse **admin.php** com a mesma senha do painel RSS. O link também está dispo
 
 Após Última Edição, as seções iniciais são Ponta Grossa, Viagem, Lazer, Gastronomia e Esporte, nessa ordem. Cada uma mostra até quatro notícias recentes, com apenas título e foto clicável. O desktop usa quatro colunas; telas intermediárias usam duas e celulares menores, uma. A seção fica vazia se ainda não houver notícias daquela categoria. Para alimentar Ponta Grossa por RSS, edite a fonte e escolha a categoria **ponta-grossa**; cadastrar uma notícia como noticias não a coloca automaticamente nessa seção.
 
-Na área **Seções**, crie, edite, reordene, oculte ou exclua uma seção. Escolha título, categoria e cor do título. Categorias novas também ficam disponíveis no painel RSS e pelo endereço `categoria.php?categoria=...`. Excluir uma seção não apaga suas notícias; remove apenas a seção e os banners associados.
+Na área **Seções**, crie, edite, reordene, oculte ou exclua uma seção. Escolha título, categoria e cor do título. Categorias novas também ficam disponíveis no painel RSS e pelo endereço `categoria.php?categoria=...`. Arraste as seções pela alça para mudar a sequência; a ordem é salva automaticamente ao soltar. Os botões de subir/descer oferecem a mesma função. Excluir uma seção não apaga suas notícias. Banners exclusivos da seção são removidos; os que também aparecem nas matérias são preservados nesses locais.
 
-Na área **Banners**, envie uma imagem ou informe seu endereço, informe o link opcional, escolha depois de qual seção aparecerá e marque **Banner ativo**. Desmarcar oculta o anúncio sem excluir o cadastro. Não é permitido inserir scripts/HTML de anúncios; os espaços recebem imagem e link, identificados como publicidade.
+Na área **Banners**, envie uma imagem ou informe seu endereço, informe o link opcional, marque os locais de exibição: página inicial, matérias RSS e/ou notícias manuais. Para a inicial, escolha depois de qual seção aparecerá. Nas matérias, aparece entre o cabeçalho e o conteúdo. Marque **Banner ativo**. Todos os anúncios ficam centralizados. Desmarcar oculta o anúncio sem excluir o cadastro. Não é permitido inserir scripts/HTML de anúncios; os espaços recebem imagem e link, identificados como publicidade.
 
 ### Notícias manuais e ordem de cadastro
 
@@ -198,11 +198,19 @@ As tabelas MySQL `materia` e `lojas` são lidas como antes. **O novo painel não
 
 Inclua o SQLite, a pasta `cms-media` e a configuração privada nos backups. Os arquivos enviados são armazenados fora da raiz pública e servidos por `media.php` com tipo validado. Arquivos de mídia compartilhados não são apagados automaticamente ao excluir um cadastro.
 
+### Apresentação das matérias
+
+As páginas `rss-materia.php`, `materia.php` e `noticia.php` têm maior afastamento do cabeçalho, data sem horário, créditos pequenos à direita da imagem e espaço antes do texto. Informe os créditos das notícias manuais no campo **Créditos da foto**; o RSS usa o nome da fonte. No final, até quatro sugestões misturam as origens da mesma categoria e excluem a matéria aberta.
+
+Atualize também a pasta `cms` e `section-order.php`. A estrutura privada é atualizada automaticamente, preservando banners existentes como anúncios da página inicial; não é necessário reinstalar.
+
 ### Verificação do CMS
 
 ```bash
 php tests/cms-test.php
+php tests/detail-migration-test.php
 PHP_BIN=php python3 tests/cms-http-test.py
+PHP_BIN=php python3 tests/layout-browser-test.py
 ```
 
 Os testes cobrem seções/cores/banners, cadastro/edição/exclusão, upload validado, ordenação entre origens com dados de exemplo, fotos clicáveis, quatro chamadas sem resumo, WhatsApp e contagem de acessos sem inflar por recarga. A leitura da base MySQL real da hospedagem continua dependendo da conexão externa e não foi confirmada neste ambiente.

@@ -3,15 +3,16 @@ require_once __DIR__.'/news.php';
 $pageDescription='Fique por dentro das novidades sobre o turismo'; $titulo=$category ? ucfirst($category) : 'Últimas Notícias';
 $palavrasChave='turismo, notícias'; $url=''; $imagem=''; $noticia=['titulo'=>$titulo,'foto1'=>'']; $pageStyles=['news-pagination.css','cms/site.css'];
 require_once dirname(__DIR__).'/cms/core.php';
+$titulo=$category ? cms_category_label($category) : 'Últimas Notícias'; $noticia['titulo']=$titulo;
 $unavailable=false;
 try { $entries=cms_news_entries($category); } catch(Throwable $e) { $entries=[]; $unavailable=true; error_log('Listagem CMS: '.$e->getMessage()); }
 $pagination=rss_paginate($entries,$_GET['pagina'] ?? 1);
 $categoryPath='categoria.php?categoria='.rawurlencode($category ?? '').'&';
 include dirname(__DIR__).'/header.php';
 ?>
-<section class="page-header"><h1 class="section-title"><?=rss_escape($titulo)?></h1><p class="page-description"><?=rss_escape($pageDescription)?></p>
+<section class="page-header category-page-header">
 <div class="category-filters"><?php foreach(cms_categories() as $c): ?><a href="categoria.php?categoria=<?=rawurlencode($c)?>" class="category-filter <?=$category===$c?'active':''?>"><?=rss_escape($c==='ponta-grossa'?'Ponta Grossa':ucfirst($c))?></a><?php endforeach; ?></div></section>
-<section class="ultimas-noticias" id="noticias-rss"><h2 class="section-title">Notícias</h2>
+<section class="ultimas-noticias" id="noticias-rss"><h1 class="section-title"><?=rss_escape($category ? cms_category_label($category) : 'Últimas Notícias')?></h1>
 <?php if($unavailable): ?><p>Não foi possível carregar as notícias RSS. Tente novamente mais tarde.</p><?php endif; ?>
 <?php if(!$pagination['items']): ?><p>Nenhuma notícia RSS disponível nesta categoria no momento.</p><?php else: ?>
 <p class="pagination-summary"><?=$pagination['total']?> notícias · Página <?=$pagination['page']?> de <?=$pagination['pages']?></p>
