@@ -26,7 +26,7 @@ guia_notice($guide['state']);
 <div class="article-content">
 <?php if($profile): ?><img src="<?=rss_escape($profile)?>" width="180" style="border-radius:100px" alt="<?=rss_escape($store['nome'] ?? '')?>"><?php endif; ?>
 <h1><?=rss_escape($store['nome'] ?? '')?></h1><p class="company-address"><?=rss_escape($store['local'] ?? '')?></p>
-<?php try { $whatsapp=cms_whatsapp($store['whatsapp'] ?? $store['whats'] ?? ''); } catch(InvalidArgumentException $e) { $whatsapp=''; } if($whatsapp): ?><a class="company-whatsapp" href="<?=rss_escape($whatsapp)?>" target="_blank" rel="noopener noreferrer"><i class="fab fa-whatsapp" aria-hidden="true"></i> Falar pelo WhatsApp</a><?php endif; ?>
+<?php try { $whatsapp=cms_whatsapp($store['whatsapp'] ?? $store['whats'] ?? ''); } catch(InvalidArgumentException $e) { $whatsapp=''; } if($whatsapp): ?><a class="company-whatsapp" href="empresa-whatsapp.php?id=<?=rawurlencode($store['url'])?>" target="_blank" rel="noopener noreferrer"><i class="fab fa-whatsapp" aria-hidden="true"></i> Falar pelo WhatsApp</a><?php endif; ?>
 <p class="company-phone"><?=rss_escape($store['telefone'] ?? '')?></p>
 <div class="conteudo"><?=nl2br(rss_escape($store['descritivo'] ?? ''))?></div>
 <div class="gallery-grid"><?php for($i=1;$i<=8;$i++): $photo=guia_asset($store['foto'.$i] ?? ''); if(!$photo) continue; ?><img src="<?=rss_escape($photo)?>" alt="Foto de <?=rss_escape($store['nome'] ?? 'estabelecimento')?>" loading="lazy" class="gallery-image"><?php endfor; ?></div>

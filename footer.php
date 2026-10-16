@@ -25,6 +25,7 @@
   <i class="fab fa-whatsapp"></i>
 </a>
     <script src="scripts.js"></script>
+<script src="cms/public.js" defer></script>
 </body>
 </html>
 

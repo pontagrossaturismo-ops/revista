@@ -15,7 +15,7 @@
    - Nome, descrição e endereço do site.
    - Banco MySQL: servidor/usuário/nome já sugeridos para o banco informado; senha e porta. Se já houver uma senha privada salva, deixar o campo vazio a mantém.
    - Banco do guia de estabelecimentos, opcional, para as páginas que usam `log-conv.php`/tabela `lojas`.
-   - Senha do painel (12 caracteres ou mais), confirmação e intervalo de importação.
+   - Senha do painel (12 caracteres ou mais), confirmação. O intervalo automático é de 12 horas.
    - Uma fonte RSS/Atom inicial, opcional, com nome e categoria.
 5. Clique em **Validar e salvar configuração**. O instalador verifica extensões, conexão MySQL e tabela `materia`; para o guia opcional, verifica `lojas`. Não cria/altera tabelas MySQL. Uma falha de validação não salva os campos. Sem o MySQL, é possível desmarcar essa opção e usar apenas RSS; as páginas de matérias/guia originais ainda dependem dos respectivos bancos.
 6. A configuração é gerada automaticamente em `revista-config/config.json`, fora do site público, com permissão 0600. As senhas do banco ficam apenas nesse arquivo; a senha do painel é armazenada como hash. Inclua a pasta privada nos backups e use o mesmo usuário para PHP e cron. O código de ativação é consumido. Depois de instalado, `instalar.php` exige a senha atual do painel para reconfigurar.
@@ -31,7 +31,7 @@ O instalador mostra o comando completo com a pasta correta. No painel da hospeda
 * * * * * cd /caminho/absoluto/do/site && /usr/bin/php rss-importar.php >> /home/usuario/revista-rss-importacao.log 2>&1
 ```
 
-O importador respeita o intervalo escolhido na tela (5 a 1440 minutos) e impede execuções simultâneas. O site não tem acesso administrativo ao painel da hospedagem para cadastrar essa tarefa sozinho. Não há atualização dependente de visitas. Mantenha/rotacione logs fora da pasta pública. Se configurou REVISTA_CONFIG_DIR no PHP web, forneça o mesmo valor ao cron.
+O importador respeita o intervalo fixo de **12 horas** e impede execuções simultâneas, compartilhando a mesma trava entre cron, site e botão do painel. Sem cron, o primeiro acesso público após o intervalo aciona uma importação em segundo plano pelo navegador. Para atualizar também quando não houver visitantes, cadastre o cron acima. O site não tem acesso administrativo ao painel da hospedagem para cadastrar essa tarefa sozinho. Mantenha/rotacione logs fora da pasta pública. Se configurou REVISTA_CONFIG_DIR no PHP web, forneça o mesmo valor ao cron.
 
 Para testar imediatamente:
 
@@ -52,7 +52,7 @@ A importação verifica TLS, protocolos, DNS/IPs públicos e cada redirecionamen
 
 ## Alternativa: variáveis de ambiente
 
-A configuração por variáveis continua compatível: `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_PORT` (3306); equivalentes `DB_CONV_*` para o guia; `RSS_DATA_DIR` fora da pasta pública; `RSS_ADMIN_PASSWORD_HASH`; `RSS_INTERVAL_MINUTES`; `SITE_TITLE`, `SITE_DESCRIPTION` e `SITE_URL`. Não é necessário preenchê-las quando usar apenas a tela.
+A configuração por variáveis continua compatível: `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_PORT` (3306); equivalentes `DB_CONV_*` para o guia; `RSS_DATA_DIR` fora da pasta pública; `RSS_ADMIN_PASSWORD_HASH`; `SITE_TITLE`, `SITE_DESCRIPTION` e `SITE_URL`. Não é necessário preenchê-las quando usar apenas a tela. O antigo `RSS_INTERVAL_MINUTES` não altera mais o intervalo fixo de 12 horas.
 
 ## Validação
 
@@ -83,7 +83,7 @@ Para importar no CMD:
 C:\xampp\php\php.exe C:\xampp\htdocs\PG-2025\novo\rss-importar.php --force
 ```
 
-Para atualização automática no Windows, use o Agendador de Tarefas: programa `C:\xampp\php\php.exe`, argumento `"C:\xampp\htdocs\PG-2025\novo\rss-importar.php"`, repetindo a cada minuto. O intervalo configurado continua sendo respeitado. Os caminhos Windows foram verificados por testes de normalização/isolamento no Linux; ainda é necessário confirmar a execução em um XAMPP real.
+Para atualização automática no Windows, use o Agendador de Tarefas: programa `C:\xampp\php\php.exe`, argumento `"C:\xampp\htdocs\PG-2025\novo\rss-importar.php"`, repetindo a cada cinco minutos (o importador só trabalha quando completar 12 horas). Para criar a tarefa, execute `agendar-rss-windows.bat` na pasta do site. O arquivo usa `C:\xampp\php\php.exe` e o caminho da própria pasta, incluindo espaços. Confira a tarefa `RevistaPG-RSS` no Agendador e teste sua execução; o computador precisa estar ligado e a conta disponível para a tarefa. A instalação dessa tarefa Windows não pode ser executada a partir deste ambiente Linux. O intervalo de 12 horas continua sendo respeitado. Os caminhos Windows foram verificados por testes de normalização/isolamento no Linux; ainda é necessário confirmar a execução em um XAMPP real.
 
 
 ## Importou itens, mas não encontrou as notícias?
@@ -214,3 +214,24 @@ PHP_BIN=php python3 tests/layout-browser-test.py
 ```
 
 Os testes cobrem seções/cores/banners, cadastro/edição/exclusão, upload validado, ordenação entre origens com dados de exemplo, fotos clicáveis, quatro chamadas sem resumo, WhatsApp e contagem de acessos sem inflar por recarga. A leitura da base MySQL real da hospedagem continua dependendo da conexão externa e não foi confirmada neste ambiente.
+
+
+### Dashboard, visitas e cliques no WhatsApp
+
+`admin.php` abre no Dashboard, com menus na barra lateral e Configurações em uma área própria. As áreas Seções, Banners, Notícias manuais e Empresas mostram inicialmente os cadastros; clique em **Adicionar item** ou **Editar** para abrir o formulário. Empresas aparecem por categoria em cartões, com até cinco por linha em telas grandes.
+
+O gráfico permite escolher dias do mês, semanas do mês ou os doze meses do ano selecionado. As semanas são faixas do mês: 1–7, 8–14, 15–21, 22–28 e 29–31. O ranking mostra até cinco matérias publicadas com mais visitas no mesmo período, misturando RSS, MySQL e notícias locais.
+
+A coleta começa após esta atualização, pelo script público do rodapé. Visitas gerais, páginas e matérias são deduplicadas por sessão durante 30 minutos; são métricas aproximadas de navegação, sem registrar IP ou identificação pessoal. Navegadores sem JavaScript não entram nas métricas do site. Os acessos da sessão autenticada no painel são excluídos dessas novas contagens. Os acessos históricos dos perfis de empresas são preservados. Os novos cliques de WhatsApp são contados no redirecionamento `empresa-whatsapp.php`, com deduplicação de 30 minutos por sessão e empresa; não medem mensagens enviadas nem conversas iniciadas.
+
+O botão **Atualizar RSS agora** aparece dentro de `admin.php` e antecipa a próxima importação. Ele exige login e proteção CSRF, mostra resultados por fonte e informa quando outra execução já está ativa. Os detalhes continuam no histórico de Fontes RSS. Falhas de uma fonte não impedem processar as demais. Não use `--force` na tarefa automática: essa opção ignora o intervalo e destina-se a testes manuais.
+
+Atualize os novos arquivos da raiz, as pastas `cms` e `rss`, além de `footer.php`, `indicador.php`, `instalar.php` e `rss-importar.php`. Não é preciso reinstalar nem criar um banco MySQL: as tabelas de métricas são criadas automaticamente no SQLite privado. Faça backup do armazenamento privado antes da atualização.
+
+Verificação adicional:
+
+```bash
+php tests/dashboard-test.php
+PHP_BIN=php python3 tests/metrics-http-test.py
+PHP_BIN=php python3 tests/layout-browser-test.py
+```
