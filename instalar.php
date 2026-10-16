@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__.'/rss/core.php';
+require_once __DIR__.'/cms/core.php';
 header('Cache-Control: no-store'); header('X-Frame-Options: DENY');
 session_set_cookie_params(['httponly'=>true,'secure'=>!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off','samesite'=>'Strict']); session_start();
 $_SESSION['setup_csrf']=$_SESSION['setup_csrf'] ?? bin2hex(random_bytes(32));

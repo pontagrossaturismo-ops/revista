@@ -44,7 +44,7 @@ Código de saída 1 indica falha de uma ou mais fontes. O erro e a última tenta
 
 ## Como as notícias aparecem
 
-Os cards e o CSS atuais são mantidos. A página inicial e categorias exibem primeiro o bloco identificado “Notícias das fontes RSS”, ordenado por data, e depois as matérias locais. As duas bases não têm ordenação conjunta. O RSS usa SQLite, sem modificar `materia`. O importador aceita RSS/Atom, evita duplicatas da mesma fonte, atualiza itens modificados e abre as matérias dentro do próprio site, com crédito e link original. Importa o texto disponibilizado no RSS, incluindo content:encoded quando presente; não extrai a íntegra das páginas externas.
+Os cards e o CSS atuais são mantidos. A página inicial tem seções configuráveis com quatro chamadas; RSS, matérias do MySQL e notícias novas do painel são misturados por ordem de cadastro. As categorias usam a mesma ordem e paginação. O RSS usa SQLite, sem modificar `materia`. O importador aceita RSS/Atom, evita duplicatas da mesma fonte, atualiza itens modificados e abre as matérias dentro do próprio site, com crédito e link original. Importa o texto disponibilizado no RSS, incluindo content:encoded quando presente; não extrai a íntegra das páginas externas.
 
 `feed.php` exporta notícias importadas e aceita `?categoria=viagem` e demais categorias. As rotas antigas `g1_turismo_rss.php` e `g1_turismo_generate_rss.php` exportam a categoria viagem; para receber G1, cadastre sua URL RSS no painel. `example_display.php` e `display.php` usam o armazenamento local. O proxy de páginas foi desativado.
 
@@ -90,7 +90,7 @@ Para atualização automática no Windows, use o Agendador de Tarefas: programa 
 
 Atualize todos os arquivos PHP do projeto, incluindo `index.php`, `noticias.php`, as páginas de categoria e as pastas `rss`/`config`. Atualizar apenas o importador não adiciona a exibição às páginas antigas. Preserve a configuração privada e o arquivo SQLite existente; não apague nem reinstale os dados para diagnosticar.
 
-Abra `noticias.php#noticias-rss`: o bloco “Notícias das fontes RSS” aparece antes das matérias locais. Em `rss-admin.php`, confira os totais armazenados/visíveis e os caminhos em “Diagnóstico do armazenamento”. Compare com a execução:
+Abra `noticias.php#noticias-rss`: a listagem mistura as notícias disponíveis, sem separar por origem. Em `rss-admin.php`, confira os totais armazenados/visíveis e os caminhos em “Diagnóstico do armazenamento”. Compare com a execução:
 
 ```bat
 C:\xampp\php\php.exe C:\xampp\htdocs\PG-2025\novo\rss-importar.php --diagnostico
@@ -157,7 +157,7 @@ O importador agora imprime início, fonte, posição do item, busca da foto, err
 
 O filtro “Todas” foi removido. `noticias.php` continua como entrada geral pelo menu Notícias; as abas levam diretamente a Viagem, Lazer, Gastronomia, Eventos e Esporte. As listagens têm no máximo **15 cards por página e 6 páginas**. Os botões Anterior/Próxima, números e indicação da página atual se adaptam ao celular. Atualize também `news-pagination.css` e `header.php`.
 
-O limite de 15 inclui RSS e matérias editoriais: RSS aparece primeiro, seguido das matérias MySQL que couberem nas 90 posições da listagem. As duas bases não são ordenadas em conjunto. A página inicial mantém sua seção resumida.
+O limite de 15 inclui RSS e matérias editoriais, misturadas pela ordem de cadastro, até 90 posições por listagem. A página inicial tem até quatro chamadas por seção configurável.
 
 Ao terminar uma importação, o sistema **exclui permanentemente** as notícias RSS mais antigas que excederem 90 registros por categoria, somando todas as fontes dessa categoria. A ordem é data de publicação e ID como desempate; inclui registros ocultos ou de fontes pausadas. Alterar uma fonte também aplica a limpeza, inclusive quando ela é movida para uma categoria que já atingiu o limite. Faça backup antes da primeira execução com esta atualização se quiser preservar o histórico de matérias antigas. As matérias editoriais da tabela MySQL `materia` não são apagadas. O histórico das importações é preservado; imagens das notícias excluídas são removidas somente se nenhum outro registro as utiliza.
 
@@ -166,3 +166,43 @@ Para aplicar o limite à base existente, atualize os arquivos e execute novament
 Foram adicionados `indicador-compras.php`, `indicador-hospedagem.php` e o endereço compatível `indicador-hospedage.php`. Todos usam `guia/listing.php` com o mesmo banco `DB_CONV` e a tabela `lojas`. Os filtros são `categoria = compras`, `categoria = hospedagem` e `categoria = gastronomia`. Se a conexão estiver correta mas não houver estabelecimentos nessas categorias, será exibida uma mensagem de lista vazia. Envie também a pasta `guia`, além dos arquivos das páginas.
 
 Execute `php tests/pagination-test.php` para verificar limite por categoria, ordenação, descarte, preservação de fotos compartilhadas, histórico e limites da paginação. Os testes HTTP verificam os 15 cards, a sexta página, os links do navegador e a existência das três rotas de guia novas/compatíveis; não foi possível confirmar o conteúdo do MySQL real neste ambiente.
+
+
+## Administrar a página inicial, notícias e empresas
+
+Acesse **admin.php** com a mesma senha do painel RSS. O link também está disponível em `rss-admin.php`. Atualize **todos os arquivos**, inclusive a pasta nova `cms`, `admin.php`, `categoria.php`, `noticia.php`, `media.php` e o CSS. Não precisa reinstalar: as tabelas adicionais são criadas automaticamente no SQLite privado já utilizado pelo site. Faça backup desse arquivo e de suas imagens antes de atualizar.
+
+### Página inicial e seções
+
+Após Última Edição, as seções iniciais são Ponta Grossa, Viagem, Lazer, Gastronomia e Esporte, nessa ordem. Cada uma mostra até quatro notícias recentes, com apenas título e foto clicável. O desktop usa quatro colunas; telas intermediárias usam duas e celulares menores, uma. A seção fica vazia se ainda não houver notícias daquela categoria. Para alimentar Ponta Grossa por RSS, edite a fonte e escolha a categoria **ponta-grossa**; cadastrar uma notícia como noticias não a coloca automaticamente nessa seção.
+
+Na área **Seções**, crie, edite, reordene, oculte ou exclua uma seção. Escolha título, categoria e cor do título. Categorias novas também ficam disponíveis no painel RSS e pelo endereço `categoria.php?categoria=...`. Excluir uma seção não apaga suas notícias; remove apenas a seção e os banners associados.
+
+Na área **Banners**, envie uma imagem ou informe seu endereço, informe o link opcional, escolha depois de qual seção aparecerá e marque **Banner ativo**. Desmarcar oculta o anúncio sem excluir o cadastro. Não é permitido inserir scripts/HTML de anúncios; os espaços recebem imagem e link, identificados como publicidade.
+
+### Notícias manuais e ordem de cadastro
+
+Na área **Notícias manuais**, cadastre título, categoria, imagem e texto. Pode enviar JPEG/PNG/GIF/WebP de até 5 MB (também sujeito a upload_max_filesize/post_max_size do PHP) ou informar um endereço de imagem. Os textos são exibidos com parágrafos, sem executar HTML. As novas notícias abrem em `noticia.php`; as anteriores do MySQL continuam usando `materia.php`. As galerias e créditos anteriores são preservados quando fornecidos pela base.
+
+RSS e notícias manuais não ficam separados na home nem nas categorias. Uma ordem comum registra os cadastros novos; editar uma notícia não a move para o início. Os registros antigos não tinham uma data comum de entrada: o MySQL usa a data disponível (quando existe) ou a ordem de seus IDs na carga inicial; o RSS antigo usa a data que já possuía. Essa primeira ordenação é aproximada. Os novos cadastros do painel e as novas importações recebem data/ordem de entrada. Registros novos percebidos posteriormente no MySQL sem data recebem a data da primeira leitura pelo site. A paginação e a regra de foto local válida para RSS continuam funcionando.
+
+### Empresas, acessos e WhatsApp
+
+Na área **Empresas**, cadastre/edite/exclua empresas de Gastronomia, Compras e Hospedagem. O formulário inclui nome, endereço curto (único), telefone, endereço, descrição, WhatsApp opcional, logotipo, capa, galeria e URL do mapa. As imagens aceitam envio de arquivo ou endereço. Empresas novas podem ser cadastradas mesmo sem um MySQL novo; passam a aparecer nos mesmos guias.
+
+Cada perfil mostra o botão **Falar pelo WhatsApp** quando o número é válido e preenchido. Números brasileiros aceitam DDD; internacionais devem incluir o código do país. O painel mostra acessos ao perfil por empresa: é contada no máximo uma visita por empresa a cada 30 minutos na mesma sessão do navegador. O contador começa nesta atualização, não representa visitantes únicos históricos e não armazena IPs. Renomear uma empresa não zera seus acessos.
+
+### Dados existentes e backups
+
+As tabelas MySQL `materia` e `lojas` são lidas como antes. **O novo painel não altera fisicamente essas tabelas:** novos cadastros, correções e exclusões de exibição ficam no SQLite privado. Ao editar uma notícia/empresa antiga, a versão corrigida é aplicada no site; ao excluir, ela deixa de aparecer e seu endereço deixa de abrir. O registro original continua no MySQL. Isso evita exigir alterações no esquema legado que não foi fornecido. Alterações feitas diretamente em formulários antigos/MySQL não substituem uma versão que já foi editada pelo novo painel. Exportações externas que leem apenas MySQL não incluem as alterações do painel.
+
+Inclua o SQLite, a pasta `cms-media` e a configuração privada nos backups. Os arquivos enviados são armazenados fora da raiz pública e servidos por `media.php` com tipo validado. Arquivos de mídia compartilhados não são apagados automaticamente ao excluir um cadastro.
+
+### Verificação do CMS
+
+```bash
+php tests/cms-test.php
+PHP_BIN=php python3 tests/cms-http-test.py
+```
+
+Os testes cobrem seções/cores/banners, cadastro/edição/exclusão, upload validado, ordenação entre origens com dados de exemplo, fotos clicáveis, quatro chamadas sem resumo, WhatsApp e contagem de acessos sem inflar por recarga. A leitura da base MySQL real da hospedagem continua dependendo da conexão externa e não foi confirmada neste ambiente.

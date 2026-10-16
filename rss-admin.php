@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__.'/rss/core.php';
+require_once __DIR__.'/cms/core.php';
 header('Cache-Control: no-store'); header('X-Frame-Options: DENY');
 session_set_cookie_params(['httponly'=>true,'secure'=>!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off','samesite'=>'Strict']); session_start();
 $password=revista_setting('RSS_ADMIN_PASSWORD_HASH');
@@ -33,7 +33,7 @@ function source_fields($source=[]) { ?>
 <input type="hidden" name="action" value="save"><input type="hidden" name="id" value="<?=(int)($source['id'] ?? 0)?>">
 <label>Nome<input name="name" maxlength="150" required value="<?=rss_escape($source['name'] ?? '')?>"></label>
 <label>Link RSS/Atom<input name="url" type="url" required value="<?=rss_escape($source['url'] ?? '')?>"></label>
-<label>Categoria<select name="category"><?php foreach(rss_categories() as $category): ?><option value="<?=rss_escape($category)?>" <?=($source['category'] ?? '')===$category?'selected':''?>><?=rss_escape(ucfirst($category))?></option><?php endforeach; ?></select></label>
+<label>Categoria<select name="category"><?php foreach(rss_categories() as $category): ?><option value="<?=rss_escape($category)?>" <?=($source['category'] ?? '')===$category?'selected':''?>><?=rss_escape(ucwords(str_replace('-',' ',$category)))?></option><?php endforeach; ?></select></label>
 <button>Salvar <?=$source?'alterações':'fonte'?></button>
 <?php }
 ?>
@@ -49,7 +49,7 @@ $sources=$db->query("SELECT s.*,count(r.id) AS attempts,coalesce(sum(r.status='e
 ?>
 <section class="panel-stats" aria-label="Resumo"><div class="panel-card"><strong><?=(int)$status['articles']?></strong><span>notícias armazenadas</span></div><div class="panel-card"><strong><?=(int)$status['visible']?></strong><span>visíveis com foto local</span></div><div class="panel-card"><strong><?=(int)$totals['attempts']?></strong><span>tentativas de importação</span></div><div class="panel-card"><strong><?=(int)$totals['errors']?></strong><span>falhas de feed</span></div><div class="panel-card"><strong><?=(int)$totals['image_errors']?></strong><span>falhas de imagem</span></div></section>
 <p class="sr-summary"><?=(int)$status['articles']?> notícias armazenadas · <?=(int)$status['visible']?> visíveis</p>
-<nav class="panel-links"><a href="noticias.php#noticias-rss">Ver notícias RSS</a><a href="feed.php" target="_blank" rel="noopener">Ver XML</a><a href="#historico">Histórico de importações</a></nav>
+<nav class="panel-links"><a href="admin.php">Administrar site, notícias e empresas</a><a href="noticias.php#noticias-rss">Ver notícias RSS</a><a href="feed.php" target="_blank" rel="noopener">Ver XML</a><a href="#historico">Histórico de importações</a></nav>
 <p class="notice">Somente matérias RSS com imagem baixada e válida são publicadas. As demais ficam armazenadas para novas tentativas. Os contadores de tentativas e erros começam nesta versão, sem reconstruir execuções anteriores.</p>
 <details class="panel-card"><summary>Cadastrar fonte RSS</summary><form method="post" class="source-form"><?php csrf_field(); source_fields(); ?></form></details>
 <section><h2>Fontes cadastradas</h2>

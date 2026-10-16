@@ -2,7 +2,7 @@
 require_once dirname(__DIR__).'/config/runtime.php';
 // PHP 8.1+, PDO SQLite, cURL, SimpleXML e mbstring não é necessário.
 function rss_escape($s) { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
-function rss_categories() { return ['viagem','lazer','gastronomia','eventos','esporte','noticias']; }
+function rss_categories() { return function_exists('cms_categories') ? cms_categories() : ['ponta-grossa','viagem','lazer','gastronomia','eventos','esporte','noticias']; }
 function rss_data_dir() {
     return revista_setting('RSS_DATA_DIR') ?: dirname(__DIR__, 2).'/revista-rss-data';
 }
@@ -20,11 +20,14 @@ function rss_db() {
     if (!is_dir($dir) && !mkdir($dir, 0700, true)) throw new RuntimeException('Não foi possível criar o diretório RSS.');
     $db = new PDO('sqlite:' . $dir . '/rss.sqlite', null, null, [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
     $db->exec('PRAGMA busy_timeout=10000; PRAGMA foreign_keys=ON');
+    $db->exec("CREATE TABLE IF NOT EXISTS content_order(seq INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,item_key TEXT NOT NULL,registered_at TEXT NOT NULL,UNIQUE(kind,item_key))");
     $db->exec('CREATE TABLE IF NOT EXISTS sources (id INTEGER PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL UNIQUE, category TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, checked_at TEXT, error TEXT)');
     $db->exec('CREATE TABLE IF NOT EXISTS articles (id INTEGER PRIMARY KEY, source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE, identity TEXT NOT NULL, title TEXT NOT NULL, url TEXT NOT NULL, summary TEXT NOT NULL, image TEXT NOT NULL, published_at TEXT NOT NULL, UNIQUE(source_id, identity))');
     $columns=array_column($db->query('PRAGMA table_info(articles)')->fetchAll(PDO::FETCH_ASSOC),'name');
     foreach (['body','image_file','image_error'] as $column) if (!in_array($column,$columns,true)) $db->exec('ALTER TABLE articles ADD COLUMN '.$column." TEXT NOT NULL DEFAULT ''");
     $db->exec('CREATE TABLE IF NOT EXISTS import_runs (id INTEGER PRIMARY KEY,source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,source_url TEXT NOT NULL,finished_at TEXT NOT NULL,status TEXT NOT NULL,processed INTEGER NOT NULL DEFAULT 0,created INTEGER NOT NULL DEFAULT 0,existing INTEGER NOT NULL DEFAULT 0,image_errors INTEGER NOT NULL DEFAULT 0,error TEXT)');
+    $db->exec("INSERT OR IGNORE INTO content_order(kind,item_key,registered_at) SELECT 'rss',CAST(id AS TEXT),published_at FROM articles ORDER BY id;
+    CREATE TRIGGER IF NOT EXISTS articles_order_cleanup AFTER DELETE ON articles BEGIN DELETE FROM content_order WHERE kind='rss' AND item_key=CAST(OLD.id AS TEXT); END");
     return $db;
 }
 function rss_url($url) {
@@ -184,7 +187,16 @@ function rss_image_src($article) {
 function rss_store($db,$source,$items) {
     $stmt=$db->prepare('INSERT INTO articles(source_id,identity,title,url,summary,image,published_at,body,image_file,image_error) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(source_id,identity) DO UPDATE SET title=excluded.title,url=excluded.url,summary=excluded.summary,image=excluded.image,body=excluded.body,image_file=CASE WHEN excluded.image_file=\'\' AND articles.image=excluded.image THEN articles.image_file ELSE excluded.image_file END,image_error=excluded.image_error');
     $db->beginTransaction();
-    try { foreach ($items as $i) $stmt->execute([$source,$i['identity'],$i['title'],$i['url'],$i['summary'],$i['image'],$i['published_at'],$i['body'] ?? $i['summary'],$i['image_file'] ?? '',$i['image_error'] ?? '']); $db->commit(); } catch (Throwable $e) { $db->rollBack(); throw $e; }
+    try {
+        $lookup=$db->prepare('SELECT id FROM articles WHERE source_id=? AND identity=?');
+        $register=$db->prepare("INSERT OR IGNORE INTO content_order(kind,item_key,registered_at) VALUES('rss',?,?)");
+        usort($items,fn($a,$b)=>strcmp($a['published_at'],$b['published_at']));
+        foreach ($items as $i) {
+            $stmt->execute([$source,$i['identity'],$i['title'],$i['url'],$i['summary'],$i['image'],$i['published_at'],$i['body'] ?? $i['summary'],$i['image_file'] ?? '',$i['image_error'] ?? '']);
+            $lookup->execute([$source,$i['identity']]); $register->execute([(string)$lookup->fetchColumn(),gmdate('Y-m-d H:i:s')]);
+        }
+        $db->commit();
+    } catch (Throwable $e) { $db->rollBack(); throw $e; }
 }
 function rss_prune($db=null) {
     $db=$db ?? rss_db(); $removed=0; $files=[];
