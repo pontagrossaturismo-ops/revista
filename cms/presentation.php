@@ -2,7 +2,7 @@
 require_once __DIR__.'/core.php';
 
 function cms_presentation(): array {
-    $stmt=cms_db()->query("SELECT name,value FROM cms_meta WHERE name IN ('edition_url','edition_label','brand_logo')");
+    $stmt=cms_db()->query("SELECT name,value FROM cms_meta WHERE name IN ('edition_url','edition_label','brand_logo','whatsapp_icon')");
     return $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 }
 function cms_brand_logo(): string {
@@ -37,4 +37,14 @@ function cms_save_presentation(array $values, array $file=[]): void {
         foreach($settings as $key=>$value) rss_sqlite_upsert($db,'INSERT INTO cms_meta(name,value) VALUES(?,?)',[$key,$value],'UPDATE cms_meta SET value=? WHERE name=?',[$value,$key]);
         $db->commit();
     } catch(Throwable $e) { if($db->inTransaction()) $db->rollBack(); throw $e; }
+}
+
+function cms_whatsapp_icon_src(): string {
+    $settings=cms_presentation();
+    return !empty($settings['whatsapp_icon']) ? $settings['whatsapp_icon'] : 'https://img.icons8.com/p1em/1200/whatsapp.jpg';
+}
+function cms_save_whatsapp_icon(array $file=[],bool $reset=false): void {
+    $icon=cms_upload($file);
+    if(!$icon && !$reset) throw new InvalidArgumentException('Selecione uma imagem ou marque a opção de restaurar o ícone padrão.');
+    rss_sqlite_upsert(cms_db(),'INSERT INTO cms_meta(name,value) VALUES(?,?)',['whatsapp_icon',$icon],'UPDATE cms_meta SET value=? WHERE name=?',[$icon,'whatsapp_icon']);
 }

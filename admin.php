@@ -23,7 +23,11 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
             $action=$_POST['action'] ?? ''; $id=(int)($_POST['id'] ?? 0); $legacy=(string)($_POST['legacy'] ?? '');
             if($action==='logout') { $_SESSION=[]; session_destroy(); header('Location: admin.php'); exit; }
             if(in_array($action,['save','delete'],true) && !in_array($area,['sections','banners','news','companies'],true)) throw new InvalidArgumentException('Área inválida.');
-            if($action==='save_presentation') {
+            if($action==='save_whatsapp_icon') {
+                if($area!=='settings') throw new InvalidArgumentException('Área inválida.');
+                cms_save_whatsapp_icon($_FILES['whatsapp_icon_file'] ?? [],!empty($_POST['reset_whatsapp_icon']));
+                $message='Ícone do WhatsApp atualizado.'; $success=true;
+            } elseif($action==='save_presentation') {
                 if($area!=='settings') throw new InvalidArgumentException('Área inválida.');
                 cms_save_presentation($_POST,$_FILES['brand_logo_file'] ?? []);
                 $message='Logo e edição atualizadas.'; $success=true;
@@ -83,6 +87,16 @@ $sections=$db->query('SELECT * FROM cms_sections ORDER BY position,id')->fetchAl
 <label>Iframe ou link da edição atual<textarea name="edition_url" rows="4" placeholder="Cole aqui o iframe completo fornecido pelo Calaméo"><?=rss_escape($presentation['edition_url'] ?? 'https://v.calameo.com/?bkcode=006701491b2a879071753&mode=mini')?></textarea></label>
 <p class="field-help">Aceita o iframe completo ou apenas seu endereço. O painel salva somente o link da revista e converte endereços iniciados em // para HTTPS. A altura de exibição é de 600 px no computador. Deixe vazio para usar a edição local existente.</p>
 <button>Salvar logo e edição</button>
+</form>
+<form method="post" enctype="multipart/form-data" class="panel-card cms-form">
+<?php admin_hidden('settings',0,'','save_whatsapp_icon'); ?>
+<h3>Ícone do WhatsApp</h3>
+<p>Personalize o ícone dos botões de contato e do compartilhamento de matérias. Os números e links de destino são mantidos.</p>
+<img src="<?=rss_escape(cms_whatsapp_icon_src())?>" alt="Ícone atual do WhatsApp" width="72" height="72" style="object-fit:contain;border-radius:50%">
+<label>Enviar ícone personalizado (PNG, JPEG ou WebP, até 5 MB)<input type="file" name="whatsapp_icon_file" accept="image/png,image/jpeg,image/webp"></label>
+<p class="field-help">Prefira uma imagem quadrada em PNG ou WebP com fundo transparente. Uma nova imagem substitui o ícone atual em todo o site.</p>
+<label><input type="checkbox" name="reset_whatsapp_icon" value="1"> Restaurar o ícone padrão (se nenhuma imagem nova for enviada)</label>
+<button>Salvar ícone do WhatsApp</button>
 </form><div class="settings-grid"><section class="panel-card"><h3>Identidade e conexão</h3><p>Nome, endereço do site, senha do painel e conexão com os bancos.</p><a href="instalar.php">Abrir configurações</a></section><section class="panel-card"><h3>Feeds e atualização</h3><p>Gerencie fontes, categorias e o histórico de importações. Intervalo automático: 12 horas.</p><a href="admin.php?area=rss">Gerenciar fontes RSS</a><a href="ofec-diagnostico.php">Gerar diagnóstico da OFEC</a></section></div>
 <?php else: $showForm=!$success && (isset($_GET['new']) || $editId || $editLegacy || ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '')==='save')); ?>
 <div class="admin-toolbar"><h2><?=rss_escape($areas[$area])?></h2><a class="admin-add" href="admin.php?area=<?=$area?>&new=1">+ Adicionar item</a></div>

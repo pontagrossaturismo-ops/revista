@@ -387,3 +387,18 @@ aparecerá no início da página.
 Validação: `php tests/sqlite-compat-test.php`, além dos testes existentes de instalação,
 RSS, CMS, métricas e concorrência. Os testes locais exercitam a nova gravação; a versão
 SQLite instalada na hospedagem precisa ser confirmada no servidor.
+
+### Ícone personalizado do WhatsApp
+
+Em **Admin → Configurações → Ícone do WhatsApp**, selecione uma imagem PNG, JPEG ou
+WebP de até 5 MB e clique em **Salvar ícone do WhatsApp**. Prefira imagem quadrada com
+fundo transparente. O arquivo validado fica no armazenamento privado do CMS e é usado
+no botão flutuante, contato das empresas e compartilhamento de matérias. Os números
+e destinos dos links permanecem iguais. A opção **Restaurar o ícone padrão** remove a
+personalização quando nenhum arquivo novo for enviado. Alterar a edição ou a logo da
+revista mantém o ícone personalizado, e vice-versa.
+
+Para aplicar esta opção, atualize `admin.php`, `cms/presentation.php` e
+`cms/engagement.php`, mantendo os demais arquivos da versão anterior, inclusive
+`media.php`, `cms/engagement.js` e `assets/whatsapp.svg`. Não exige reinstalação nem
+alteração manual do banco; usa a gravação compatível com SQLite antigo.

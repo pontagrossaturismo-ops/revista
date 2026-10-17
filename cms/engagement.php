@@ -1,12 +1,12 @@
 <?php
-require_once __DIR__.'/core.php';
+require_once __DIR__.'/presentation.php';
 function cms_public_url($path) {
     $base=rtrim((string)revista_setting('SITE_URL',''),'/');
     if(!$base) { $host=$_SERVER['HTTP_HOST'] ?? 'localhost'; if(!preg_match('/^[a-z0-9.\-:\[\]]+$/i',$host)) $host='localhost'; $dir=rtrim(str_replace('\\','/',dirname($_SERVER['SCRIPT_NAME'] ?? '/index.php')),'/.'); $base=(!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off'?'https':'http').'://'.$host.$dir; }
     return $base.'/'.ltrim($path,'/');
 }
 function cms_whatsapp_icon() {
-    return '<img class="whatsapp-icon" data-whatsapp-icon src="https://img.icons8.com/p1em/1200/whatsapp.jpg" width="28" height="28" alt="" decoding="async" referrerpolicy="no-referrer">';
+    return '<img class="whatsapp-icon" data-whatsapp-icon src="'.rss_escape(cms_whatsapp_icon_src()).'" width="28" height="28" alt="" decoding="async" referrerpolicy="no-referrer">';
 }
 function cms_share($title,$path) {
     $url=cms_public_url($path); $text=rawurlencode($title.' '.$url); $encoded=rawurlencode($url);
