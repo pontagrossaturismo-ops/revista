@@ -28,4 +28,20 @@ check(count($batch['items'])===1 && count($calls)===5 && str_contains(implode(' 
 $later=function($url) use ($article) { if(str_contains($url,'?')) { parse_str(parse_url($url,PHP_URL_QUERY),$q); if($q['page']==='3') throw new RuntimeException('Domínio sem endereço público.'); $rows=[]; for($i=1;$i<=30;$i++) $rows[]=['id'=>(int)$q['page']*100+$i]; return [json_encode(['data'=>['items'=>$rows]]),$url]; } return [json_encode(['data'=>array_merge($article,['id'=>(int)basename(parse_url($url,PHP_URL_PATH))])]),$url]; };
 $batch=rss_ofec_items($later);
 check(count($batch['items'])===60 && str_contains(implode(' ',$batch['errors']),'Página 3'),'Falha de DNS na página 3 preserva as duas páginas anteriores');
+$expired=rss_curl_progress_options(hrtime(true)-1,false);
+check(isset($expired[CURLOPT_PROGRESSFUNCTION]) && $expired[CURLOPT_NOPROGRESS]===false,'Selecionar callback legado com verificação de tempo habilitada');
+check($expired[CURLOPT_PROGRESSFUNCTION](null,0,0,0,0)===1 && $expired[CURLOPT_PROGRESSFUNCTION](0,0,0,0)===1,'Interromper prazo vencido nas duas assinaturas antigas');
+$future=rss_curl_progress_options(hrtime(true)+15000000000,false);
+check($future[CURLOPT_PROGRESSFUNCTION](null,0,0,0,0)===0,'Permitir transferência dentro do prazo usando callback legado');
+$temp=tempnam(sys_get_temp_dir(),'revista-curl-'); file_put_contents($temp,'Conteúdo de teste');
+try {
+    $ch=curl_init('file://'.$temp);
+    curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true]+$future);
+    check(curl_exec($ch)==='Conteúdo de teste','cURL executa transferência com callback compatível');
+    curl_close($ch);
+    $ch=curl_init('file://'.$temp);
+    curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true]+$expired);
+    check(curl_exec($ch)===false && curl_errno($ch)===CURLE_ABORTED_BY_CALLBACK,'cURL realmente interrompe transferência com prazo vencido');
+    curl_close($ch);
+} finally { unlink($temp); }
 echo "$n verificações de proteção de rede passaram.\n";

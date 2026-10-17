@@ -83,6 +83,12 @@ function rss_resolve($base, $ref) {
     $path = str_starts_with($ref, '/') ? $ref : preg_replace('~/[^/]*$~', '/', $p['path'] ?? '/') . $ref;
     return rss_url($p['scheme'] . '://' . $p['host'] . (isset($p['port']) ? ':' . $p['port'] : '') . $path);
 }
+function rss_curl_progress_options($deadline,$modern=null) {
+    $modern=$modern ?? defined('CURLOPT_XFERINFOFUNCTION');
+    $option=$modern ? constant('CURLOPT_XFERINFOFUNCTION') : CURLOPT_PROGRESSFUNCTION;
+    // A quantidade de argumentos varia entre versões antigas do PHP/cURL.
+    return [CURLOPT_NOPROGRESS=>false,$option=>static function(...$unused) use ($deadline) { return hrtime(true)>=$deadline?1:0; }];
+}
 function rss_fetch($url,$maxBytes=2097152) {
     $deadline=hrtime(true)+15000000000;
     for ($redirect=0; $redirect<5; $redirect++) {
@@ -93,7 +99,7 @@ function rss_fetch($url,$maxBytes=2097152) {
         $body = ''; $location = ''; $overflow = false;
         $ch = curl_init($url);
         $ip = $ips[0]; if (str_contains($ip, ':')) $ip = '[' . $ip . ']';
-        curl_setopt_array($ch, [CURLOPT_FOLLOWLOCATION=>false, CURLOPT_CONNECTTIMEOUT_MS=>min(5000,$remaining), CURLOPT_TIMEOUT_MS=>$remaining, CURLOPT_NOSIGNAL=>true, CURLOPT_LOW_SPEED_LIMIT=>128, CURLOPT_LOW_SPEED_TIME=>10, CURLOPT_NOPROGRESS=>false, CURLOPT_XFERINFOFUNCTION=>static function($handle,$total,$downloaded,$uploadTotal,$uploaded) use ($deadline) { return hrtime(true)>=$deadline?1:0; }, CURLOPT_PROTOCOLS=>CURLPROTO_HTTP | CURLPROTO_HTTPS, CURLOPT_PROXY=>'', CURLOPT_RESOLVE=>[$p['host'].':'.$port.':'.$ip], CURLOPT_USERAGENT=>'RevistaPG-RSS/1.0', CURLOPT_SSL_VERIFYPEER=>true, CURLOPT_SSL_VERIFYHOST=>2,
+        curl_setopt_array($ch, [CURLOPT_FOLLOWLOCATION=>false, CURLOPT_CONNECTTIMEOUT_MS=>min(5000,$remaining), CURLOPT_TIMEOUT_MS=>$remaining, CURLOPT_NOSIGNAL=>true, CURLOPT_LOW_SPEED_LIMIT=>128, CURLOPT_LOW_SPEED_TIME=>10, CURLOPT_PROTOCOLS=>CURLPROTO_HTTP | CURLPROTO_HTTPS, CURLOPT_PROXY=>'', CURLOPT_RESOLVE=>[$p['host'].':'.$port.':'.$ip], CURLOPT_USERAGENT=>'RevistaPG-RSS/1.0', CURLOPT_SSL_VERIFYPEER=>true, CURLOPT_SSL_VERIFYHOST=>2,
             CURLOPT_WRITEFUNCTION=>function($ch,$chunk) use (&$body,&$overflow,$maxBytes) { if (strlen($body)+strlen($chunk)>$maxBytes) { $overflow=true; return 0; } $body.=$chunk; return strlen($chunk); },
             CURLOPT_HEADERFUNCTION=>function($ch,$line) use (&$location) { if (stripos($line,'Location:')===0) $location=trim(substr($line,9)); return strlen($line); }]);
         $ok = curl_exec($ch); $code = curl_getinfo($ch,CURLINFO_HTTP_CODE); $error=curl_error($ch); curl_close($ch);
