@@ -34,8 +34,7 @@ function cms_save_presentation(array $values, array $file=[]): void {
     if($logo) $settings['brand_logo']=$logo;
     $db=cms_db(); $db->beginTransaction();
     try {
-        $stmt=$db->prepare('INSERT INTO cms_meta(name,value) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value');
-        foreach($settings as $key=>$value) $stmt->execute([$key,$value]);
+        foreach($settings as $key=>$value) rss_sqlite_upsert($db,'INSERT INTO cms_meta(name,value) VALUES(?,?)',[$key,$value],'UPDATE cms_meta SET value=? WHERE name=?',[$value,$key]);
         $db->commit();
     } catch(Throwable $e) { if($db->inTransaction()) $db->rollBack(); throw $e; }
 }

@@ -370,3 +370,20 @@ Esses dados são salvos no CMS sem alterar a conexão com o banco nem exigir rei
 
 As fotos das matérias RSS e manuais têm altura máxima de 500 px e exibem a imagem
 inteira, sem cortes; os títulos são centralizados e têm tamanho adaptável à tela.
+
+### Erro SQLite `near "ON": syntax error` na hospedagem
+
+Algumas hospedagens usam uma biblioteca SQLite anterior a 3.24, mesmo com PHP 8.
+A gravação do instalador, RSS, cadastros, edições e métricas agora usa UPDATE seguido
+de INSERT, quando necessário, na mesma transação, sem depender de UPSERT moderno.
+Os registros mantêm seus IDs, relacionamentos, imagens e datas originais de cadastro.
+
+Atualize `instalar.php`, `rss/core.php`, `rss/storage.php`, `cms/core.php`,
+`cms/metrics.php` e `cms/presentation.php`. Preserve as pastas privadas de dados e
+configuração. Reabra o instalador e tente salvar novamente; não é necessário apagar
+banco nem gerar novo token apenas por esse erro. Se outra validação falhar, a mensagem
+aparecerá no início da página.
+
+Validação: `php tests/sqlite-compat-test.php`, além dos testes existentes de instalação,
+RSS, CMS, métricas e concorrência. Os testes locais exercitam a nova gravação; a versão
+SQLite instalada na hospedagem precisa ser confirmada no servidor.

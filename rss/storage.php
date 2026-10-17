@@ -22,3 +22,19 @@ function rss_schema_lock($callback) {
     } catch(PDOException $e) { if(rss_storage_is_busy($e)) rss_storage_unavailable($e); throw $e; }
     finally { flock($lock,LOCK_UN); fclose($lock); }
 }
+
+// UPDATE + INSERT na mesma transação também funciona em SQLite anterior a 3.24.
+// Não usar REPLACE: ele apaga a linha e pode alterar IDs ou disparar cascatas.
+function rss_sqlite_upsert(PDO $db, string $insertSql, array $insertValues, string $updateSql, array $updateValues): void {
+    $ownTransaction=!$db->inTransaction();
+    if($ownTransaction) $db->beginTransaction();
+    try {
+        $update=$db->prepare($updateSql);
+        $update->execute($updateValues);
+        if($update->rowCount()===0) $db->prepare($insertSql)->execute($insertValues);
+        if($ownTransaction) $db->commit();
+    } catch(Throwable $e) {
+        if($ownTransaction && $db->inTransaction()) $db->rollBack();
+        throw $e;
+    }
+}

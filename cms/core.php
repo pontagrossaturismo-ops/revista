@@ -41,7 +41,7 @@ function cms_db() {
                 $db->commit();
             } catch(Throwable $e) { $db->rollBack(); throw $e; }
         }
-        $db->exec("INSERT INTO cms_meta(name,value) VALUES('schema_version','2') ON CONFLICT(name) DO UPDATE SET value='2'");
+        rss_sqlite_upsert($db,'INSERT INTO cms_meta(name,value) VALUES(?,?)',['schema_version','2'],'UPDATE cms_meta SET value=? WHERE name=?',['2','schema_version']);
     });
     $ready=true; return $db;
 }
@@ -139,7 +139,7 @@ function cms_save_news($id,$legacy,$values) {
         $exists=$db->prepare('SELECT * FROM cms_news WHERE legacy_id=?'); $exists->execute([$legacy]); $old=$exists->fetch(PDO::FETCH_ASSOC);
         if(!$old && !cms_legacy_news($legacy)) throw new InvalidArgumentException('Matéria não encontrada.');
         $order=cms_register('sql',$legacy,'1970-01-01 00:00:00');
-        $db->prepare('INSERT INTO cms_news(legacy_id,title,category,image,body,created_at,credit) VALUES(?,?,?,?,?,?,?) ON CONFLICT(legacy_id) DO UPDATE SET title=excluded.title,category=excluded.category,image=excluded.image,body=excluded.body,credit=excluded.credit,deleted=0')->execute([$legacy,$title,$category,$image,$body,$order['registered_at'],$credit]);
+        rss_sqlite_upsert($db,'INSERT INTO cms_news(legacy_id,title,category,image,body,created_at,credit) VALUES(?,?,?,?,?,?,?)',[$legacy,$title,$category,$image,$body,$order['registered_at'],$credit],'UPDATE cms_news SET title=?,category=?,image=?,body=?,credit=?,deleted=0 WHERE legacy_id=?',[$title,$category,$image,$body,$credit,$legacy]);
         return;
     }
     if($id) {
@@ -152,7 +152,7 @@ function cms_save_news($id,$legacy,$values) {
 function cms_delete_news($id,$legacy=0) {
     $db=cms_db();
     if($legacy) {
-        $db->prepare("INSERT INTO cms_news(legacy_id,title,category,image,body,created_at,deleted) VALUES(?,'','','','','1970-01-01',1) ON CONFLICT(legacy_id) DO UPDATE SET deleted=1")->execute([$legacy]);
+        rss_sqlite_upsert($db,"INSERT INTO cms_news(legacy_id,title,category,image,body,created_at,deleted) VALUES(?,'','','','','1970-01-01',1)",[$legacy],'UPDATE cms_news SET deleted=1 WHERE legacy_id=?',[$legacy]);
     } else $db->prepare('DELETE FROM cms_news WHERE id=? AND legacy_id IS NULL')->execute([$id]);
 }
 function cms_legacy_companies() {
@@ -193,18 +193,18 @@ function cms_save_company($id,$legacy,$values) {
     if($legacy) {
         $exists=false; foreach(cms_companies()['rows'] as $store) if(($store['_legacy'] ?? '')===$legacy) $exists=true;
         if(!$exists) throw new InvalidArgumentException('Empresa não encontrada.');
-        $db->prepare('INSERT INTO cms_companies(legacy_slug,slug,data) VALUES(?,?,?) ON CONFLICT(legacy_slug) DO UPDATE SET slug=excluded.slug,data=excluded.data,deleted=0')->execute([$legacy,$slug,json_encode($data,JSON_THROW_ON_ERROR)]);
+        rss_sqlite_upsert($db,'INSERT INTO cms_companies(legacy_slug,slug,data) VALUES(?,?,?)',[$legacy,$slug,json_encode($data,JSON_THROW_ON_ERROR)],'UPDATE cms_companies SET slug=?,data=?,deleted=0 WHERE legacy_slug=?',[$slug,json_encode($data,JSON_THROW_ON_ERROR),$legacy]);
     } elseif($id) {
         $stmt=$db->prepare('UPDATE cms_companies SET slug=?,data=? WHERE id=? AND legacy_slug IS NULL AND deleted=0'); $stmt->execute([$slug,json_encode($data,JSON_THROW_ON_ERROR),$id]); if(!$stmt->rowCount()) throw new InvalidArgumentException('Empresa não encontrada.');
     } else $db->prepare('INSERT INTO cms_companies(slug,data) VALUES(?,?)')->execute([$slug,json_encode($data,JSON_THROW_ON_ERROR)]);
     $db->exec("INSERT OR IGNORE INTO cms_meta(name,value) VALUES('local_companies_enabled','1')");
 }
 function cms_delete_company($id,$legacy='') {
-    if($legacy) cms_db()->prepare("INSERT INTO cms_companies(legacy_slug,slug,data,deleted) VALUES(?,?,?,1) ON CONFLICT(legacy_slug) DO UPDATE SET deleted=1")->execute([$legacy,'deleted-'.hash('sha256',$legacy),'{}']);
+    if($legacy) rss_sqlite_upsert(cms_db(),'INSERT INTO cms_companies(legacy_slug,slug,data,deleted) VALUES(?,?,?,1)',[$legacy,'deleted-'.hash('sha256',$legacy),'{}'],'UPDATE cms_companies SET deleted=1 WHERE legacy_slug=?',[$legacy]);
     else cms_db()->prepare('DELETE FROM cms_companies WHERE id=? AND legacy_slug IS NULL')->execute([$id]);
 }
 function cms_company_views($key,$increment=false) {
-    $db=cms_db(); if($increment) $db->prepare('INSERT INTO company_views(company_key,total) VALUES(?,1) ON CONFLICT(company_key) DO UPDATE SET total=total+1')->execute([$key]);
+    $db=cms_db(); if($increment) rss_sqlite_upsert($db,'INSERT INTO company_views(company_key,total) VALUES(?,1)',[$key],'UPDATE company_views SET total=total+1 WHERE company_key=?',[$key]);
     $stmt=$db->prepare('SELECT total FROM company_views WHERE company_key=?'); $stmt->execute([$key]); return (int)$stmt->fetchColumn();
 }
 function cms_save_section($id,$values) {

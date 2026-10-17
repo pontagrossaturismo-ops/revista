@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             $storage->exec('CREATE TABLE IF NOT EXISTS sources (id INTEGER PRIMARY KEY, name TEXT NOT NULL, url TEXT NOT NULL UNIQUE, category TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, checked_at TEXT, error TEXT)');
             $storage->beginTransaction();
             try {
-                if ($feedUrl) $storage->prepare('INSERT INTO sources(name,url,category) VALUES(?,?,?) ON CONFLICT(url) DO UPDATE SET name=excluded.name,category=excluded.category')->execute([$feedName,$feedUrl,$category]);
+                if ($feedUrl) rss_sqlite_upsert($storage,'INSERT INTO sources(name,url,category) VALUES(?,?,?)',[$feedName,$feedUrl,$category],'UPDATE sources SET name=?,category=? WHERE url=?',[$feedName,$category,$feedUrl]);
                 $new['INSTALLED']=true; revista_write_config($new); $storage->commit();
             } catch(Throwable $e) { if ($storage->inTransaction()) $storage->rollBack(); throw $e; }
             if (is_file(revista_config_dir().'/setup-token.hash')) unlink(revista_config_dir().'/setup-token.hash');

@@ -238,14 +238,16 @@ function rss_image_src($article) {
     return !empty($article['image_file']) ? 'rss-imagem.php?id='.(int)$article['id'] : $article['image'];
 }
 function rss_store($db,$source,$items) {
-    $stmt=$db->prepare('INSERT INTO articles(source_id,identity,title,url,summary,image,published_at,body,image_file,image_error,credit) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(source_id,identity) DO UPDATE SET title=excluded.title,url=excluded.url,summary=excluded.summary,image=excluded.image,body=excluded.body,published_at=excluded.published_at,image_file=CASE WHEN excluded.image_file=\'\' AND articles.image=excluded.image THEN articles.image_file ELSE excluded.image_file END,image_error=excluded.image_error,credit=excluded.credit');
+    $insertSql='INSERT INTO articles(source_id,identity,title,url,summary,image,published_at,body,image_file,image_error,credit) VALUES(?,?,?,?,?,?,?,?,?,?,?)';
+    $updateSql="UPDATE articles SET title=?,url=?,summary=?,image=?,published_at=?,body=?,image_file=CASE WHEN ?='' AND image=? THEN image_file ELSE ? END,image_error=?,credit=? WHERE source_id=? AND identity=?";
     $db->beginTransaction();
     try {
         $lookup=$db->prepare('SELECT id FROM articles WHERE source_id=? AND identity=?');
         $register=$db->prepare("INSERT OR IGNORE INTO content_order(kind,item_key,registered_at) VALUES('rss',?,?)");
         usort($items,fn($a,$b)=>strcmp($a['published_at'],$b['published_at']));
         foreach ($items as $i) {
-            $stmt->execute([$source,$i['identity'],$i['title'],$i['url'],$i['summary'],$i['image'],$i['published_at'],$i['body'] ?? $i['summary'],$i['image_file'] ?? '',$i['image_error'] ?? '',$i['credit'] ?? '']);
+            $file=$i['image_file'] ?? '';
+            rss_sqlite_upsert($db,$insertSql,[$source,$i['identity'],$i['title'],$i['url'],$i['summary'],$i['image'],$i['published_at'],$i['body'] ?? $i['summary'],$file,$i['image_error'] ?? '',$i['credit'] ?? ''],$updateSql,[$i['title'],$i['url'],$i['summary'],$i['image'],$i['published_at'],$i['body'] ?? $i['summary'],$file,$i['image'],$file,$i['image_error'] ?? '',$i['credit'] ?? '',$source,$i['identity']]);
             $lookup->execute([$source,$i['identity']]); $register->execute([(string)$lookup->fetchColumn(),gmdate('Y-m-d H:i:s')]);
         }
         $db->commit();

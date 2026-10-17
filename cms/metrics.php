@@ -5,7 +5,8 @@ function cms_metrics_db() { return cms_db(); }
 function cms_metric($kind,$item) {
     $key=$kind.':'.$item;
     if(time()-(int)($_SESSION['metrics'][$key] ?? 0)<1800) return;
-    cms_metrics_db()->prepare('INSERT INTO daily_metrics(day,kind,item,total) VALUES(?,?,?,1) ON CONFLICT(day,kind,item) DO UPDATE SET total=total+1')->execute([(new DateTimeImmutable('now',new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d'),$kind,$item]);
+    $day=(new DateTimeImmutable('now',new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d');
+    rss_sqlite_upsert(cms_metrics_db(),'INSERT INTO daily_metrics(day,kind,item,total) VALUES(?,?,?,1)',[$day,$kind,$item],'UPDATE daily_metrics SET total=total+1 WHERE day=? AND kind=? AND item=?',[$day,$kind,$item]);
     $_SESSION['metrics'][$key]=time();
 }
 function cms_clicks($key) { $stmt=cms_metrics_db()->prepare("SELECT COALESCE(SUM(total),0) FROM daily_metrics WHERE kind='whatsapp' AND item=?"); $stmt->execute([$key]); return (int)$stmt->fetchColumn(); }
