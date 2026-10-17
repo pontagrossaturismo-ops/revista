@@ -33,6 +33,7 @@ with tempfile.TemporaryDirectory(prefix='revista-setup-') as tmp:
             check('Código ou senha inválidos' in request(post={'csrf':csrf,'activation':'wrong'})[1],'Código incorreto bloqueado')
             status,page=request(post={'csrf':csrf,'activation':token})
             check('revistapg.mysql.uhserver.com' in page and 'name="db_password"' in page,'Defaults do banco e formulário')
+            check('Validar e salvar configuração</button>' in page and '<option>viagem</option>' in page and '</main></html>' in page,'Primeira instalação renderiza categorias e botão até o fim')
             form={'csrf':csrf,'action':'save','site_title':'Meu Turismo','site_description':'Descrição de teste','site_url':'https://example.com','interval':'15','admin_password':'test-only-pass-123','admin_confirm':'test-only-pass-123','db_port':'3306'}
             invalid=dict(form,admin_confirm='diferente'); check('confirmação igual' in request(post=invalid)[1],'Confirmar senha')
             check(not (private/'config.json').exists(),'Falha não cria configuração')

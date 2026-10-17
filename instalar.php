@@ -7,6 +7,15 @@ $config=revista_config(); $installed=!empty($config['INSTALLED']);
 $authHash=$installed ? revista_setting('RSS_ADMIN_PASSWORD_HASH','') : (is_file(revista_config_dir().'/setup-token.hash') ? file_get_contents(revista_config_dir().'/setup-token.hash') : '');
 $authorized=$authHash && hash_equals(hash('sha256',$authHash),(string)($_SESSION['site_config_auth'] ?? ''));
 $message=''; $saved=false;
+// A primeira instalação ainda não possui armazenamento preparado: não abrir SQLite para desenhar o formulário.
+$setupCategories=['ponta-grossa','viagem','lazer','gastronomia','eventos','esporte','noticias'];
+if($installed && $authorized) {
+    try { $setupCategories=rss_categories(); }
+    catch(Throwable $e) { error_log('Categorias no instalador: '.$e->getMessage()); }
+}
+$setupExtensions=['curl','DOM','SimpleXML','pdo_sqlite','mysqli'];
+$missingExtensions=array_values(array_filter($setupExtensions,fn($extension)=>!extension_loaded($extension)));
+
 if ($_SERVER['REQUEST_METHOD']==='POST') {
     if (!hash_equals($_SESSION['setup_csrf'],(string)($_POST['csrf'] ?? ''))) { http_response_code(403); exit('Formulário expirado.'); }
     if (isset($_POST['activation'])) {
@@ -14,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         else { usleep(500000); $message='Código ou senha inválidos.'; }
     } elseif ($authorized && ($_POST['action'] ?? '')==='save') {
         try {
-            foreach (['curl','SimpleXML','pdo_sqlite','mysqli'] as $extension) if (!extension_loaded($extension)) throw new RuntimeException('Falta a extensão PHP '.$extension.'.');
+            foreach ($setupExtensions as $extension) if (!extension_loaded($extension)) throw new RuntimeException('Falta a extensão PHP '.$extension.'.');
             $new=$config;
             $new['SITE_TITLE']=trim((string)($_POST['site_title'] ?? ''));
             $new['SITE_DESCRIPTION']=trim((string)($_POST['site_description'] ?? ''));
@@ -55,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             $feedUrl=trim((string)($_POST['feed_url'] ?? '')); $feedName=trim((string)($_POST['feed_name'] ?? '')); $category=$_POST['category'] ?? 'noticias';
             if ($feedUrl) {
                 $feedUrl=rss_url($feedUrl);
-                if (!$feedName || !in_array($category,rss_categories(),true)) throw new RuntimeException('Preencha nome e categoria da fonte.');
+                if (!$feedName || !in_array($category,$setupCategories,true)) throw new RuntimeException('Preencha nome e categoria da fonte.');
                 rss_public_ips(parse_url($feedUrl,PHP_URL_HOST));
             }
             if (!is_dir($new['RSS_DATA_DIR']) && !mkdir($new['RSS_DATA_DIR'],0700,true)) throw new RuntimeException('Não foi possível preparar armazenamento RSS.');
@@ -81,6 +90,7 @@ function setup_csrf() { echo '<input type="hidden" name="csrf" value="'.rss_esca
 <?php if (!$authHash): ?><p>Para proteger a primeira configuração, execute uma vez no terminal da hospedagem, dentro da pasta do site:</p><pre>php configurar-token.php</pre><p>Depois atualize esta página e informe o código gerado. O diretório pai da pasta do site precisa permitir criar uma pasta privada. Use HTTPS.</p>
 <?php else: ?><form method="post"><?php setup_csrf(); ?><label><?=$installed?'Senha do painel':'Código de ativação'?><input type="password" name="activation" required autocomplete="current-password"></label><button>Entrar</button></form><?php endif; ?>
 <?php else: ?>
+<?php if($missingExtensions): ?><p role="alert" style="padding:16px;border:1px solid #b42318;color:#b42318">A hospedagem precisa habilitar estas extensões PHP antes de salvar: <?=rss_escape(implode(', ',$missingExtensions))?>. Solicite a ativação ao suporte da hospedagem.</p><?php endif; ?>
 <form method="post"><?php setup_csrf(); ?><input type="hidden" name="action" value="save">
 <fieldset><legend>Site</legend><label>Nome do site<input name="site_title" maxlength="150" value="<?=field('SITE_TITLE','Revista PG Turismo')?>" required></label><label>Descrição<textarea name="site_description"><?=field('SITE_DESCRIPTION','Turismo, lazer, gastronomia e notícias')?></textarea></label><label>Endereço do site<input type="url" name="site_url" value="<?=field('SITE_URL','https://www.revistapgturismo.com.br')?>" required></label></fieldset>
 <fieldset><legend>Banco de dados existente</legend><label><input type="checkbox" name="use_db" value="1" <?=!$installed || !empty($config['DB_HOST'])?'checked':''?>> Usar o banco MySQL das matérias</label><label>Servidor<input name="db_host" value="<?=field('DB_HOST','revistapg.mysql.uhserver.com')?>"></label><label>Usuário<input name="db_user" value="<?=field('DB_USER','revistapg')?>"></label><label>Senha do banco<input type="password" name="db_password" autocomplete="new-password"></label><p>Se já estiver salva, deixe a senha vazia para mantê-la. A senha nunca é exibida.</p><label>Nome do banco<input name="db_name" value="<?=field('DB_NAME','revistapg')?>"></label><label>Porta<input type="number" name="db_port" min="1" max="65535" value="<?=field('DB_PORT',3306)?>"></label><p>A conexão e a tabela materia são verificadas antes de salvar. Nenhuma tabela existente será alterada.</p></fieldset>
@@ -88,6 +98,6 @@ function setup_csrf() { echo '<input type="hidden" name="csrf" value="'.rss_esca
 <?php foreach(['host'=>'Servidor','user'=>'Usuário','name'=>'Nome do banco'] as $key=>$label): ?><label><?=rss_escape($label)?><input name="conv_<?=$key?>" value="<?=field('DB_CONV_'.strtoupper($key))?>"></label><?php endforeach; ?>
 <label>Senha do banco do guia<input type="password" name="conv_password" autocomplete="new-password"></label><label>Porta<input type="number" name="conv_port" min="1" max="65535" value="<?=field('DB_CONV_PORT',3306)?>"></label><p>Deixe a senha vazia para manter a existente. A tabela lojas será validada.</p></fieldset>
 <fieldset><legend>Acesso e atualização</legend><label><?=$installed?'Nova senha do painel (opcional)':'Senha do painel'?><input type="password" name="admin_password" minlength="12" autocomplete="new-password" <?=$installed?'':'required'?>></label><label>Confirmar senha<input type="password" name="admin_confirm" autocomplete="new-password" <?=$installed?'':'required'?>></label><input type="hidden" name="interval" value="720"><p>Atualização automática a cada 12 horas. Você pode antecipar pelo botão Atualizar RSS agora no painel.</p></fieldset>
-<fieldset><legend>Fonte RSS inicial (opcional)</legend><label>Nome da fonte<input name="feed_name"></label><label>URL do RSS/Atom<input type="url" name="feed_url"></label><label>Categoria<select name="category"><?php foreach(rss_categories() as $c): ?><option><?=rss_escape($c)?></option><?php endforeach; ?></select></label></fieldset><button>Validar e salvar configuração</button></form>
+<fieldset><legend>Fonte RSS inicial (opcional)</legend><label>Nome da fonte<input name="feed_name"></label><label>URL do RSS/Atom<input type="url" name="feed_url"></label><label>Categoria<select name="category"><?php foreach($setupCategories as $c): ?><option><?=rss_escape($c)?></option><?php endforeach; ?></select></label></fieldset><button>Validar e salvar configuração</button></form>
 <?php if ($installed): ?><h2>Próximo passo: atualização automática</h2><p>Abra <a href="rss-admin.php">o painel de feeds</a> para cadastrar outras fontes. No painel da hospedagem, crie uma tarefa cron a cada minuto com este comando; o importador respeita o intervalo de 12 horas:</p><pre><?=rss_escape('cd '.escapeshellarg(__DIR__).' && php rss-importar.php')?></pre><p>O site não consegue criar tarefas no painel da hospedagem. Para testar imediatamente no terminal, execute <code>php rss-importar.php --force</code>.</p><p><a href="index.php">Ver site</a></p><?php endif; ?>
 <?php endif; ?></main></html>
