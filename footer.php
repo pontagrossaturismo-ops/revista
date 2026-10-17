@@ -22,7 +22,7 @@
     </footer>
     
 <a href="https://wa.me/+5542999650421" class="whatsapp-button" aria-label="WhatsApp">
-  <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><path d="M27 15a11 11 0 0 1-16 10L4 28l2-7A11 11 0 1 1 27 15Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M11 9c-2 3 3 10 8 12l3-3-4-2-2 1-3-4 1-2Z" fill="currentColor"/></svg>
+  <?=cms_whatsapp_icon()?>
 </a>
     <script src="scripts.js"></script>
 <script src="cms/public.js" defer></script><script src="cms/engagement.js" defer></script>

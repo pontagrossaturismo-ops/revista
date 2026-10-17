@@ -9,7 +9,7 @@ with tempfile.TemporaryDirectory(prefix='revista-tourism-browser-') as tmp:
     seed="""require 'cms/tourism.php';
     cms_save_news(0,0,['title'=>'Caminhos para explorar os Campos Gerais','category'=>'viagem','image'=>'assets/route-nature.svg','body'=>'Uma notícia de teste para validar o compartilhamento.']);
     foreach(['lazer','gastronomia','esporte','eventos','ponta-grossa'] as $cat) cms_save_news(0,0,['title'=>'Descobertas na categoria '.cms_category_label($cat),'category'=>$cat,'image'=>'assets/route-city.svg','body'=>'Conteúdo de teste.']);
-    cms_save_company(0,'',['nome'=>'Café de teste','url'=>'cafe-teste','categoria'=>'gastronomia','bairro'=>'Centro','local'=>'Rua de teste','faixa_preco'=>'Econômico','horarios'=>'Terça a sábado, 10h às 18h','whatsapp'=>'42999991234','perfil'=>'assets/placeholder.svg']);
+    cms_save_company(0,'',['nome'=>'Café de teste','url'=>'cafe-teste','categoria'=>'gastronomia','bairro'=>'Centro','local'=>'Rua de teste','faixa_preco'=>'Econômico','horarios'=>'Terça a sábado, 10h às 18h','whatsapp'=>'42999991234','perfil'=>'assets/placeholder.svg','capa'=>'assets/route-city.svg','foto1'=>'assets/route-nature.svg','foto2'=>'assets/route-nature.svg','foto3'=>'assets/route-nature.svg','foto4'=>'assets/route-nature.svg','foto5'=>'assets/route-nature.svg','foto6'=>'assets/route-nature.svg','foto7'=>'assets/route-nature.svg','foto8'=>'assets/route-nature.svg']);
     tourism_save('events',0,['title'=>'Feira de teste','category'=>'gastronomia','starts'=>'2099-12-01T10:00','ends'=>'2099-12-01T18:00','location'=>'Centro de teste','body'=>'Programação de teste.','price'=>'Consulte o organizador','published'=>1]);"""
     subprocess.run([php,'-r',seed],env=env,cwd=root,check=True)
     with socket.socket() as sock: sock.bind(('127.0.0.1',0)); port=sock.getsockname()[1]
@@ -49,6 +49,20 @@ with tempfile.TemporaryDirectory(prefix='revista-tourism-browser-') as tmp:
                 page.goto(base+'indicador-gastronomia.php'); page.locator('select[name=bairro]').select_option('Centro'); page.locator('select[name=preco]').select_option('Econômico'); page.get_by_role('button',name='Filtrar empresas',exact=True).click()
                 check('bairro=Centro' in page.url and 'Café de teste' in page.locator('.noticias-grid').inner_text(),'Filtro do guia funciona no navegador')
                 page.locator('.noticia-card a').click(); check('10h às 18h' in page.locator('.company-details').inner_text(),'Perfil exibe horários informados')
+                page.wait_for_load_state('networkidle')
+                photos=page.locator('.company-gallery-link').all(); boxes=[photo.bounding_box() for photo in photos]
+                check(len(boxes)==8 and len({round(b['y']) for b in boxes})==2 and len({round(b['y']) for b in boxes[:4]})==1,'Galeria com oito fotos em duas linhas de quatro no desktop')
+                logo=page.locator('.company-logo-frame').bounding_box(); hero=page.locator('.company-hero').bounding_box()
+                check(logo['y']<hero['y']+hero['height']<logo['y']+logo['height'],'Logo sobreposta à foto de capa')
+                check(page.locator('.company-whatsapp').bounding_box()['y']>page.locator('.company-address').bounding_box()['y'],'WhatsApp continua abaixo do endereço')
+                check(page.locator('[data-whatsapp-icon]').count()==2 and page.locator('.company-whatsapp img').evaluate('e=>e.complete&&e.naturalWidth>0'),'Contato e botão flutuante com ícones e alternativa local carregados')
+                check(all(photo.get_attribute('target')=='_blank' for photo in photos),'Fotos abrem em tamanho maior')
+                page.screenshot(path='/tmp/revista-company-profile.png',full_page=True)
+                page.set_viewport_size({'width':390,'height':844})
+                boxes=[photo.bounding_box() for photo in page.locator('.company-gallery-link').all()]
+                check(len({round(b['y']) for b in boxes})==4 and page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'Galeria móvel com duas colunas sem transbordamento')
+                page.screenshot(path='/tmp/revista-company-profile-mobile.png',full_page=True)
+                page.set_viewport_size({'width':1440,'height':1000})
                 page.goto(base+'noticia.php?id=1'); share=page.locator('.share-tools'); check(base+'noticia.php?id=1'==share.get_attribute('data-share-url'),'Compartilhamento aponta para matéria interna')
                 check(page.locator('.article-content h1').evaluate('e=>getComputedStyle(e).textAlign')=='center','Título da matéria centralizado')
                 check(page.locator('.main-image').evaluate('e=>e.getBoundingClientRect().height<=500 && getComputedStyle(e).objectFit==="contain"'),'Foto limitada a 500 px sem cortes')
