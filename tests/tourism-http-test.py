@@ -17,7 +17,7 @@ with tempfile.TemporaryDirectory(prefix='revista-tourism-http-') as tmp:
         if not ok: raise AssertionError(label)
         count+=1
     with tempfile.TemporaryFile() as log:
-        server=subprocess.Popen([php,'-d','session.save_path='+tmp,'-S',f'127.0.0.1:{port}','-t',str(root)],env=env,stdout=log,stderr=log)
+        server=subprocess.Popen([php,'-d','display_errors=1','-d','error_reporting=-1','-d','session.save_path='+tmp,'-S',f'127.0.0.1:{port}','-t',str(root)],env=env,stdout=log,stderr=log)
         try:
             for _ in range(50):
                 try: status,html,_=req(admin,'admin.php'); break
@@ -51,6 +51,9 @@ with tempfile.TemporaryDirectory(prefix='revista-tourism-http-') as tmp:
             req(guest,'metricas.php',{'page':'roteiro.php','slug':'um-dia-em-ponta-grossa'}); req(guest,'metricas.php',{'page':'evento.php','id':1})
             report=req(admin,'admin.php')[1]
             check('Roteiro revisado' in report and 'Acessos a roteiros' in report and 'Acessos a eventos' in report,'Dashboard acompanha roteiros e eventos')
+            for path in ['indicador-hospedagem.php','indicador-compras.php','indicador-gastronomia.php','busca.php','agenda.php','roteiro.php','empresa-whatsapp.php','indicador-hospedagem.php?q[]=teste&bairro[]=teste&preco[]=teste']:
+                response=req(guest,path)[1]
+                check('Warning:' not in response and 'Deprecated:' not in response and 'Fatal error:' not in response,'Parâmetros opcionais ausentes ou inválidos sem avisos: '+path)
             settings=dict(csrf=csrf,area='settings',action='save_presentation',edition_label='Edição 102',edition_url='https://example.com/embed/revista?edition=102&view=book')
             check('Logo e edição atualizadas.' in req(admin,'admin.php',settings)[1],'Salvar edição atual pelo painel')
             edition_home=req(guest,'index.php')[1]

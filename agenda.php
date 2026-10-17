@@ -2,7 +2,7 @@
 require __DIR__.'/cms/tourism.php';
 $filters=[]; foreach(['from','to'] as $key) if(is_string($_GET[$key] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2}$/',$_GET[$key])) $filters[$key]=$_GET[$key].($key==='to'?' 23:59':' 00:00');
 if(($_GET['period'] ?? '')==='weekend') { $now=new DateTimeImmutable('now',new DateTimeZone('America/Sao_Paulo')); $start=(int)$now->format('N')>=6?$now->modify('saturday this week'):$now->modify('next saturday'); $filters['from']=$start->format('Y-m-d').' 00:00'; $filters['to']=$start->modify('+1 day')->format('Y-m-d').' 23:59'; }
-$category=is_string($_GET['category'] ?? '')?cms_category($_GET['category']):''; if($category) $filters['category']=$category;
+$category=is_string($_GET['category'] ?? null)?cms_category($_GET['category']):''; if($category) $filters['category']=$category;
 $events=tourism_events($filters); $titulo='Agenda de eventos'; $pageDescription='Encontre eventos, cultura e programação em Ponta Grossa.'; $url=''; $imagem=''; $palavrasChave='agenda, eventos'; $noticia=['titulo'=>$titulo,'foto1'=>'']; include __DIR__.'/header.php';
 ?>
 <section class="discovery-heading"><p class="eyebrow">O que fazer</p><h1>Agenda de eventos</h1><p>Escolha uma data e encontre a próxima experiência.</p><a class="action-link" href="agenda.php?period=weekend">Neste fim de semana</a></section>

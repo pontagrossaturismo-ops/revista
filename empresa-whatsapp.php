@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__.'/cms/metrics.php';
-$slug=is_string($_GET['id'] ?? '')?$_GET['id']:'';
+$slug=is_string($_GET['id'] ?? null)?$_GET['id']:'';
 foreach(cms_companies()['rows'] as $store) if($store['url']===$slug) {
     try { $url=cms_whatsapp($store['whatsapp'] ?? $store['whats'] ?? ''); } catch(InvalidArgumentException $e) { $url=''; }
     if(!$url) break;

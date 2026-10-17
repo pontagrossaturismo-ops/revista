@@ -3,7 +3,7 @@ require_once __DIR__.'/core.php';
 $guideOptions=['gastronomia'=>['Gastronomia','gastronomia'],'compras'=>['Compras','compras'],'hospedagem'=>['Hospedagem','hospedagem']];
 if(!isset($guideCategory,$guideOptions[$guideCategory])) { http_response_code(404); exit('Página não encontrada.'); }
 [$label,$storeCategory]=$guideOptions[$guideCategory]; $guide=guia_lojas('categoria',$storeCategory); if($guide['state']!=='ok') http_response_code(503);
-$query=is_string($_GET['q'] ?? '')?substr(trim($_GET['q']),0,150):''; $neighborhood=is_string($_GET['bairro'] ?? '')?trim($_GET['bairro']):''; $price=is_string($_GET['preco'] ?? '')?trim($_GET['preco']):'';
+$query=is_string($_GET['q'] ?? null)?substr(trim($_GET['q']),0,150):''; $neighborhood=is_string($_GET['bairro'] ?? null)?trim($_GET['bairro']):''; $price=is_string($_GET['preco'] ?? null)?trim($_GET['preco']):'';
 $neighborhoods=[]; $prices=[]; foreach($guide['rows'] as $s) { if(!empty($s['bairro'])) $neighborhoods[$s['bairro']]=true; if(!empty($s['faixa_preco'])) $prices[$s['faixa_preco']]=true; } ksort($neighborhoods); ksort($prices);
 $guide['rows']=array_values(array_filter($guide['rows'],fn($s)=>(!$query || str_contains(cms_category(($s['nome'] ?? '').' '.($s['local'] ?? '').' '.($s['descritivo'] ?? '')),cms_category($query))) && (!$neighborhood || ($s['bairro'] ?? '')===$neighborhood) && (!$price || ($s['faixa_preco'] ?? '')===$price)));
 $titulo='Guia de '.$label; $pageDescription='Conheça os estabelecimentos de '.$storeCategory.' de Ponta Grossa.'; $palavrasChave=$storeCategory.', Ponta Grossa'; $url=''; $imagem=''; $noticia=['titulo'=>$titulo,'foto1'=>'']; include dirname(__DIR__).'/header.php';
